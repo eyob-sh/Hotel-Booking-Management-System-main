@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ALTER COLUMN "userId" DROP NOT NULL;

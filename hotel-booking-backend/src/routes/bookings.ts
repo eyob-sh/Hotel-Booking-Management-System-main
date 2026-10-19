@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import { db, hotels, bookings, users, roomTypes } from "../db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { RoomType } from "../db/schema";
-import verifyToken from "../middleware/auth";
+import verifyToken, { optionalAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { body, param, validationResult } from "express-validator";
 import rateLimit from "express-rate-limit";
@@ -65,7 +65,9 @@ const populateHotel = async (rows: any[], hotelFields: string[]) => {
 };
 
 const populateUser = async (rows: any[], userFields: string[]) => {
-  const userIds = [...new Set(rows.map((row) => row.userId))];
+  const userIds = [...new Set(rows.map((row) => row.userId))].filter(
+    (id): id is string => Boolean(id)
+  );
   if (userIds.length === 0) return rows;
 
   const userRows = await db
@@ -100,12 +102,12 @@ const populateUser = async (rows: any[], userFields: string[]) => {
 type BookingAccess = "full" | "hotel" | "self" | "none";
 
 const getBookingAccess = async (
-  booking: { userId: string; hotelId: string },
+  booking: { userId: string | null; hotelId: string },
   userId: string,
   role: string
 ): Promise<BookingAccess> => {
   if (role === "admin") return "full";
-  if (booking.userId === userId) return "self";
+  if (booking.userId && booking.userId === userId) return "self";
 
   const [hotel] = await db
     .select({ userId: hotels.userId })
@@ -157,7 +159,7 @@ const INVENTORY_HOLDING_STATUSES = ["pending", "confirmed"];
  */
 router.post(
   "/",
-  verifyToken,
+  optionalAuth,
   bookingLimiter,
   [
     body("hotelId").notEmpty().withMessage("hotelId is required"),
@@ -342,7 +344,7 @@ router.post(
       // --- Pay at arrival: nothing up front, booking confirmed -------------
       if (providerId === "pay-at-arrival") {
         const booking = await createBooking({
-          userId: req.userId,
+          userId: req.userId ?? null,
           hotel,
           guest,
           adultCount,
@@ -393,7 +395,7 @@ router.post(
         currency: charged.currency,
         metadata: {
           hotelId,
-          userId: req.userId,
+          userId: req.userId ?? "guest",
           providerId,
           nights: String(nights),
           totalStored: String(quote.totalStored),
@@ -404,7 +406,7 @@ router.post(
       // --- Bank transfer: booking pending until a manager confirms ---------
       if (runtime.provider.kind === "onsite") {
         const booking = await createBooking({
-          userId: req.userId,
+          userId: req.userId ?? null,
           hotel,
           guest,
           adultCount,
@@ -1039,13 +1041,16 @@ router.delete(
           })
           .where(eq(hotels._id, booking.hotelId));
 
-        await tx
-          .update(users)
-          .set({
-            totalBookings: sql`${users.totalBookings} - 1`,
-            totalSpent: sql`${users.totalSpent} - ${totalCost}`,
-          })
-          .where(eq(users._id, booking.userId));
+        // Guest bookings have no user to decrement.
+        if (booking.userId) {
+          await tx
+            .update(users)
+            .set({
+              totalBookings: sql`${users.totalBookings} - 1`,
+              totalSpent: sql`${users.totalSpent} - ${totalCost}`,
+            })
+            .where(eq(users._id, booking.userId));
+        }
 
         return booking;
       });

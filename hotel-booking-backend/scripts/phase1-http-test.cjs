@@ -208,8 +208,16 @@ const nightsOf = (checkIn, checkOut) => {
     email: "p1-guest@test.com", phone: "+251911223344",
   };
 
-  const noAuth = await req("POST", `${BASE}/bookings`, { body: bookBase });
-  check("POST /bookings unauthenticated -> 401", noAuth.status === 401, noAuth.status);
+  // Phase 2: guest checkout — no account/cookie required.
+  const guestBook = await req("POST", `${BASE}/bookings`, {
+    body: { ...bookBase, checkIn: d("2027-08-01"), checkOut: d("2027-08-03") },
+  });
+  check("guest booking (no login) -> 201", guestBook.status === 201, guestBook.status);
+  check(
+    "guest booking has null userId",
+    guestBook.data?.booking?.userId === null,
+    guestBook.data?.booking?.userId
+  );
 
   const wrongTotal = await book(cookies.guest, {
     ...bookBase, checkIn: d("2027-03-01"), checkOut: d("2027-03-04"), totalCost: 1,

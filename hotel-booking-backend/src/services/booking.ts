@@ -42,7 +42,8 @@ export type LedgerEntry = {
 };
 
 export type CreateBookingArgs = {
-  userId: string;
+  /** Null for guest checkout (no account) — user stats are then skipped. */
+  userId?: string | null;
   hotel: Hotel;
   guest: {
     firstName: string;
@@ -161,7 +162,7 @@ export async function createBooking(args: CreateBookingArgs): Promise<Booking> {
           .insert(bookings)
           .values({
             _id: bookingId,
-            userId: args.userId,
+            userId: args.userId ?? null,
             hotelId: hotel._id,
             firstName: guest.firstName,
             lastName: guest.lastName,
@@ -216,13 +217,16 @@ export async function createBooking(args: CreateBookingArgs): Promise<Booking> {
           })
           .where(eq(hotels._id, hotel._id));
 
-        await tx
-          .update(users)
-          .set({
-            totalBookings: sql`${users.totalBookings} + 1`,
-            totalSpent: sql`${users.totalSpent} + ${args.totalStored}`,
-          })
-          .where(eq(users._id, args.userId));
+        // Guests have no account — nothing to denormalize.
+        if (args.userId) {
+          await tx
+            .update(users)
+            .set({
+              totalBookings: sql`${users.totalBookings} + 1`,
+              totalSpent: sql`${users.totalSpent} + ${args.totalStored}`,
+            })
+            .where(eq(users._id, args.userId));
+        }
 
         return booking;
       });

@@ -173,7 +173,8 @@ export const bookings = pgTable(
   "bookings",
   {
     _id: uuid("_id").primaryKey().defaultRandom(),
-    userId: uuid("userId").notNull(),
+    // Nullable: guest checkout (Phase 2) creates bookings with no account.
+    userId: uuid("userId"),
     hotelId: uuid("hotelId").notNull(),
     firstName: varchar("firstName", { length: 255 }).notNull(),
     lastName: varchar("lastName", { length: 255 }).notNull(),

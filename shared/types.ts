@@ -96,7 +96,8 @@ export type HotelType = {
 
 export type BookingType = {
   _id: string;
-  userId: string;
+  /** Null for guest checkout (no account). */
+  userId: string | null;
   hotelId: string;
   firstName: string;
   lastName: string;
