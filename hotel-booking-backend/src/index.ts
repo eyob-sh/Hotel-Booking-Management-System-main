@@ -293,4 +293,5 @@ process.on("uncaughtException", (error) => {
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
   gracefulShutdown("UNHANDLED_REJECTION");
-});
+});import paymentProvidersAdminRoutes from "./routes/payment-providers-admin";
+app.use("/api/admin/payment-providers", paymentProvidersAdminRoutes);
