@@ -188,15 +188,32 @@ plus Phase 0 regression (55 HTTP + 24 services) all green.
 ✅ totals never come from client; ✅ pay-at-arrival + bank-transfer complete; ✅ telebirr mock completes;
 ✅ payments ledger rows created.
 
-### Phase 2 — Phone identity
+### Phase 2 — Guest checkout & phone identity
 
+**Goal:** guests can book **without** an account (like Booking.com/Airbnb guest checkout); phone
+becomes a first-class identity so phone-only guests and users both work.
+
+**Guest checkout**
+- [ ] `bookings.userId` → **nullable** (migration `0003`); `createBooking` accepts a guest (no user)
+  and skips the `users` stats update when `userId` is null.
+- [ ] `optionalAuth` middleware (sets `req.userId` only when a valid cookie is present, otherwise
+  continues) → used on `POST /api/bookings` with `userId: req.userId || null`.
+- [ ] Frontend: booking route is **public** (drop `ProtectedRoute`); first/last name editable for
+  guests; on success show a confirmation with the booking `reference`; guests are **not** redirected
+  to `/my-bookings`.
+- [ ] **Manage my booking** page: look up by `reference` + phone/email → view / cancel
+  (honours `settings.freeCancellationHours`).
+
+**Phone identity**
 - [ ] `users.email` → nullable; add `phone` (E.164, UNIQUE), `phoneVerified BOOLEAN`; later `telegramId`.
 - [ ] Register/login `identifier` = email **or** phone (reuse existing password flow — no SMS provider needed now).
 - [ ] Booking requires `phone` (email optional); `bookings.email` NOT NULL relaxed, `phone` required.
+  *(Already true from Phase 1 — verify.)*
 - [ ] Frontend: phone field on register/sign-in/checkout (respect `settings.features.phoneLogin`).
 - [ ] (Later) SMS OTP behind `features.otpEnabled`.
 
-**Acceptance:** phone-only user registers, logs in, books with phone; email-only still works.
+**Acceptance:** guest books with only a phone (no account); phone-only user registers, logs in, books
+with phone; email-only user still works.
 
 ### Phase 3 — Manager/owner UX
 
@@ -276,3 +293,66 @@ plus Phase 0 regression (55 HTTP + 24 services) all green.
    - Frontend: `node node_modules/vite/bin/vite.js --port 5174`.
 3. Check current phase checkbox status above → continue from first unchecked phase.
 4. After any code change: backend `tsc` must be clean; run frontend dev-server transform check.
+
+---
+
+## 6. Feature backlog (prioritized, from OTA comparison)
+
+Ideas drawn from Booking.com / Airbnb / Agoda / Expedia, filtered for a **single-property,
+Ethiopia-first** deployment. Not yet scheduled into the numbered phases above — pick from here when
+a phase completes. ★ = my top value/effort picks.
+
+### Tier 1 — Booking experience (guests expect these)
+- ★ **Manage my booking** lookup (reference + phone/email) — view/cancel/modify. *(part of Phase 2)*
+- ★ **Visual availability calendar** per room type (booked/free nights).
+- **Bookable extras/add-ons** — airport pickup, breakfast, late checkout, extra bed (per-night or flat).
+- **Promo/coupon codes** + automatic discounts (long-stay, early-bird, seasonal).
+- **Date-based pricing** — weekend/holiday/season rates + per-occupancy supplements.
+- **Waitlist / notify-me** when a room type is full for the chosen dates.
+- **Fair self-service cancellation** — auto-compute refundable amount within policy.
+
+### Tier 2 — Money & compliance (critical for Ethiopia)
+- **Taxes & fees**: VAT 15% + service charge, configurable, shown on receipts.
+- ★ **PDF invoice/receipt** (VAT number + reference), downloadable + emailed.
+- **Real telebirr / Chapa / CBE Birr** integration (pluggable seam already exists).
+- **Bank-transfer proof upload** — guest uploads screenshot; manager marks paid (pending flow exists).
+- **Payment reconciliation view** — ledger vs bookings, refunds, deposit/partial states.
+- **Live USD rate** fetch instead of manual `settings.usdRate`.
+
+### Tier 3 — Communication & retention (trust + conversion)
+- ★ **Email notifications** (nodemailer/Resend): confirmation, pre-arrival reminder, cancellation, review request. *(Not present yet.)*
+- **Telegram bot** actually wired (config/secrets seam exists) — owner alerts + guest status.
+- **SMS/OTP** for phone verification + booking lookup.
+- **Held-booking expiry** — auto-release `pending` bookings after X minutes + notify guest.
+- **Guest "claim booking"** — book as guest, later create an account and attach the booking.
+
+### Tier 4 — Owner/manager operations
+- ★ **Booking calendar / timeline** + **manual booking entry** (walk-in/phone; `source` already exists).
+- **Housekeeping & room-status board** (clean/dirty/inspected/out-of-order) driving inventory.
+- **Check-in / check-out workflow UI** (statuses exist).
+- **Blackout dates / maintenance blocks** that remove inventory.
+- **Rate & room-type management UI** (room-type CRUD, photos, seasonal rates) — Phase 3 covers part.
+- **Reports**: occupancy %, ADR, RevPAR, pace, source mix, no-show rate (extend AnalyticsDashboard).
+- **CSV/Excel export** of bookings and revenue.
+- **Audit log** of status/payment changes (who/when).
+- **Staff sub-accounts** with limited permissions.
+
+### Tier 5 — Trust, content & discovery
+- **Reviews**: photos, owner replies, moderation, "verified stay" badge.
+- **Property content**: gallery, amenities, house rules, policies, FAQ.
+- **SEO**: schema.org `Hotel`/`LodgingBusiness` JSON-LD, sitemap.xml, meta/OG tags.
+- **Amharic + English** i18n toggle.
+- **Trust badges**: secure payment, free cancellation, best-price-direct.
+
+### Tier 6 — Platform / engineering quality
+- **Refresh-token rotation + logout-everywhere**, password reset, email verification.
+- **Idempotency keys** on booking/payment endpoints (prevent duplicate charges on retry).
+- **Backups** (scheduled `pg_dump`) + restore runbook; **Sentry** + structured logs/request IDs.
+- **CI** (lint, tsc, build, phase tests) + Docker compose for Postgres.
+- **E2E tests** (Playwright scaffolded) for guest + owner flows.
+- **Email deliverability** (SPF/DKIM) + anti-fraud (duplicate/velocity checks).
+
+### My recommended next three after Phase 2
+1. **Email notifications** (confirm/reminder/cancel) — biggest trust/conversion win, currently missing.
+2. **Taxes + PDF receipt** — legal necessity in ET.
+3. **Owner booking calendar + manual booking entry** — most backend pieces already exist.
