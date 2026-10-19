@@ -219,6 +219,42 @@ const nightsOf = (checkIn, checkOut) => {
     guestBook.data?.booking?.userId
   );
 
+  // Manage my booking: lookup by reference + phone/email (no account).
+  const guestRef = guestBook.data?.booking?.reference;
+  const lookupOk = await req("POST", `${BASE}/bookings/lookup`, {
+    body: { reference: guestRef, phone: "+251911223344" },
+  });
+  check(
+    "lookup by reference + phone -> 200",
+    lookupOk.status === 200 &&
+      lookupOk.data?.booking?.reference === guestRef &&
+      !!lookupOk.data?.hotel,
+    lookupOk.status
+  );
+
+  const lookupEmail = await req("POST", `${BASE}/bookings/lookup`, {
+    body: { reference: guestRef, email: "P1-GUEST@test.com" },
+  });
+  check("lookup by reference + email (case-insensitive) -> 200",
+    lookupEmail.status === 200, lookupEmail.status);
+
+  const lookupWrong = await req("POST", `${BASE}/bookings/lookup`, {
+    body: { reference: guestRef, phone: "+251999999999" },
+  });
+  check("lookup wrong phone -> 404", lookupWrong.status === 404, lookupWrong.status);
+
+  const guestCancel = await req("POST", `${BASE}/bookings/lookup/cancel`, {
+    body: { reference: guestRef, phone: "+251911223344" },
+  });
+  check("guest self-service cancel -> 200 cancelled",
+    guestCancel.status === 200 && guestCancel.data?.booking?.status === "cancelled",
+    guestCancel);
+  const guestCancelAgain = await req("POST", `${BASE}/bookings/lookup/cancel`, {
+    body: { reference: guestRef, phone: "+251911223344" },
+  });
+  check("guest cancel again -> 409", guestCancelAgain.status === 409,
+    guestCancelAgain.status);
+
   const wrongTotal = await book(cookies.guest, {
     ...bookBase, checkIn: d("2027-03-01"), checkOut: d("2027-03-04"), totalCost: 1,
   });

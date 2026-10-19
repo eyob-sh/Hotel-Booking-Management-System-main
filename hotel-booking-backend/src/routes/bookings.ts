@@ -542,6 +542,244 @@ router.post(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Guest self-service lookup ("Manage my booking"): a guest proves ownership
+// with the booking reference plus the phone or email they booked under. No
+// account required. Rate-limited to blunt reference/phone guessing.
+// ---------------------------------------------------------------------------
+const lookupLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Too many lookup attempts, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const normalizeRef = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toUpperCase();
+
+const digitsOnly = (value: unknown) => String(value ?? "").replace(/[^\d]/g, "");
+
+const normalizeEmail = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+const phoneMatches = (a: unknown, b: unknown): boolean => {
+  const da = digitsOnly(a);
+  const dbDigits = digitsOnly(b);
+  if (!da || !dbDigits) return false;
+  if (da === dbDigits) return true;
+  const n = Math.min(9, da.length, dbDigits.length);
+  return n >= 7 && da.slice(-n) === dbDigits.slice(-n);
+};
+
+/** True when the supplied contact details match the booking's. */
+const contactMatches = (
+  booking: { email: string | null; phone: string | null },
+  contact: { phone?: unknown; email?: unknown }
+): boolean => {
+  const emailOk =
+    !!contact.email &&
+    !!booking.email &&
+    normalizeEmail(contact.email) === normalizeEmail(booking.email);
+  const phoneOk = phoneMatches(booking.phone, contact.phone);
+  return emailOk || phoneOk;
+};
+
+/** Fields safe to hand back to the (verified) booking owner. */
+const toGuestBooking = (b: any) => ({
+  _id: b._id,
+  reference: b.reference,
+  hotelId: b.hotelId,
+  firstName: b.firstName,
+  lastName: b.lastName,
+  email: b.email,
+  phone: b.phone,
+  roomTypeId: b.roomTypeId,
+  adultCount: b.adultCount,
+  childCount: b.childCount,
+  checkIn: b.checkIn,
+  checkOut: b.checkOut,
+  totalCost: b.totalCost,
+  currency: b.currency,
+  depositAmount: b.depositAmount,
+  balanceAmount: b.balanceAmount,
+  status: b.status,
+  paymentStatus: b.paymentStatus,
+  paymentMethod: b.paymentMethod,
+  specialRequests: b.specialRequests,
+  source: b.source,
+  createdAt: b.createdAt,
+});
+
+const hotelSummary = async (hotelId: string) => {
+  const [hotel] = await db
+    .select({
+      _id: hotels._id,
+      name: hotels.name,
+      city: hotels.city,
+      country: hotels.country,
+      contact: hotels.contact,
+    })
+    .from(hotels)
+    .where(eq(hotels._id, hotelId))
+    .limit(1);
+  return hotel ?? null;
+};
+
+const cancellationDeadline = async (checkIn: unknown) => {
+  const s = await getSettings();
+  const checkInInstant = new Date(`${checkIn}T00:00:00Z`);
+  const deadline = new Date(
+    checkInInstant.getTime() - s.freeCancellationHours * 60 * 60 * 1000
+  );
+  return {
+    freeCancellationHours: s.freeCancellationHours,
+    freeCancellationUntil: deadline.toISOString(),
+    freeCancellation: Date.now() <= deadline.getTime(),
+  };
+};
+
+/**
+ * @swagger
+ * /api/bookings/lookup:
+ *   post:
+ *     summary: Look up a booking by reference + phone/email (guest, no account)
+ *     tags: [Bookings]
+ *     responses:
+ *       200: { description: Booking found }
+ *       400: { description: Missing reference or contact }
+ *       404: { description: Not found }
+ */
+router.post(
+  "/lookup",
+  lookupLimiter,
+  [
+    body("reference").trim().notEmpty().withMessage("Booking reference is required"),
+    body("phone").optional().isString(),
+    body("email").optional().isString(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { reference, phone, email } = req.body;
+    if (!phone && !email) {
+      return res
+        .status(400)
+        .json({ message: "Provide the phone or email used for the booking" });
+    }
+
+    try {
+      const [booking] = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.reference, normalizeRef(reference)))
+        .limit(1);
+
+      if (!booking || !contactMatches(booking, { phone, email })) {
+        return res.status(404).json({ message: "No matching booking found" });
+      }
+
+      const [hotel, cancellation] = await Promise.all([
+        hotelSummary(booking.hotelId),
+        cancellationDeadline(booking.checkIn),
+      ]);
+
+      res.status(200).json({
+        booking: toGuestBooking(booking),
+        hotel,
+        ...cancellation,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Unable to look up booking" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/bookings/lookup/cancel:
+ *   post:
+ *     summary: Cancel a booking by reference + phone/email (guest, no account)
+ *     tags: [Bookings]
+ *     responses:
+ *       200: { description: Cancelled }
+ *       400: { description: Missing reference or contact }
+ *       404: { description: Not found }
+ *       409: { description: Booking cannot be cancelled in its current state }
+ */
+router.post(
+  "/lookup/cancel",
+  lookupLimiter,
+  [
+    body("reference").trim().notEmpty().withMessage("Booking reference is required"),
+    body("phone").optional().isString(),
+    body("email").optional().isString(),
+    body("cancellationReason").optional().isString(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { reference, phone, email, cancellationReason } = req.body;
+    if (!phone && !email) {
+      return res
+        .status(400)
+        .json({ message: "Provide the phone or email used for the booking" });
+    }
+
+    try {
+      const [booking] = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.reference, normalizeRef(reference)))
+        .limit(1);
+
+      if (!booking || !contactMatches(booking, { phone, email })) {
+        return res.status(404).json({ message: "No matching booking found" });
+      }
+
+      if (!INVENTORY_HOLDING_STATUSES.includes(booking.status)) {
+        return res.status(409).json({
+          message: `Booking cannot be cancelled while "${booking.status}"`,
+        });
+      }
+
+      const cancelled = await db.transaction(async (tx) => {
+        await releaseBookingInventory({
+          executor: tx as unknown as typeof db,
+          booking,
+        });
+        const [updated] = await tx
+          .update(bookings)
+          .set({
+            status: "cancelled",
+            cancellationReason:
+              cancellationReason || "Cancelled by guest (self-service)",
+          })
+          .where(eq(bookings._id, booking._id))
+          .returning();
+        return updated;
+      });
+
+      res.status(200).json({ booking: toGuestBooking(cancelled) });
+    } catch (error) {
+      if (error instanceof BookingConflictError) {
+        return res.status(409).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Unable to cancel booking" });
+    }
+  }
+);
+
 /**
  * @swagger
  * /api/bookings:
