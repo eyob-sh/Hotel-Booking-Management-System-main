@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import { check, validationResult } from "express-validator";
 import verifyToken from "../middleware/auth";
 import { authLimiter } from "../middleware/rateLimiter";
+import { isEmail, normalizePhone } from "../services/phone";
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.post(
     [
         check("firstName", "First Name is required").isString(),
         check("lastName", "Last Name is required").isString(),
-        check("email", "Email is required").isEmail(),
+        check("email").optional({ values: "falsy" }).isEmail().withMessage("Invalid email"),
         check("password", "Password with 8 or more characters required").isLength({
             min: 8,
         }),
@@ -52,23 +53,58 @@ router.post(
         }
 
         try {
-            const { firstName, lastName, email, password } = req.body;
+            const { firstName, lastName, password } = req.body;
+            // Email is optional; phone is the alternative identity (Phase 2).
+            const email = req.body.email
+                ? String(req.body.email).trim().toLowerCase()
+                : null;
+            const phone = normalizePhone(req.body.phone);
 
-            const [existing] = await db
-                .select({ _id: users._id })
-                .from(users)
-                .where(eq(users.email, email))
-                .limit(1);
+            if (!email && !phone) {
+                return res
+                    .status(400)
+                    .json({ message: "Provide an email or phone number" });
+            }
+            if (req.body.phone && !phone) {
+                return res
+                    .status(400)
+                    .json({ message: "Enter a valid phone number" });
+            }
 
-            if (existing) {
-                return res.status(400).json({ message: "User already exists" });
+            if (email) {
+                const [existingEmail] = await db
+                    .select({ _id: users._id })
+                    .from(users)
+                    .where(eq(users.email, email))
+                    .limit(1);
+                if (existingEmail) {
+                    return res.status(400).json({ message: "User already exists" });
+                }
+            }
+            if (phone) {
+                const [existingPhone] = await db
+                    .select({ _id: users._id })
+                    .from(users)
+                    .where(eq(users.phone, phone))
+                    .limit(1);
+                if (existingPhone) {
+                    return res
+                        .status(400)
+                        .json({ message: "Phone number already registered" });
+                }
             }
 
             const hashedPassword = await bcrypt.hash(password, 8);
 
             const [user] = await db
                 .insert(users)
-                .values({ firstName, lastName, email, password: hashedPassword })
+                .values({
+                    firstName,
+                    lastName,
+                    email,
+                    phone,
+                    password: hashedPassword,
+                })
                 .returning();
 
             const { accessToken, refreshToken } = createTokens(user._id, user.role);

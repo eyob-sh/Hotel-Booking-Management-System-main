@@ -81,12 +81,15 @@ export const users = pgTable(
   "users",
   {
     _id: uuid("_id").primaryKey().defaultRandom(),
-    email: varchar("email", { length: 255 }).notNull(),
+    // Nullable: phone-only accounts (Phase 2) have no email.
+    email: varchar("email", { length: 255 }),
     password: varchar("password", { length: 255 }).notNull(),
     firstName: varchar("firstName", { length: 255 }).notNull(),
     lastName: varchar("lastName", { length: 255 }).notNull(),
     role: userRoleEnum("role").notNull().default("user"),
+    // E.164 phone — first-class identity for phone-only accounts (Phase 2).
     phone: varchar("phone", { length: 50 }),
+    phoneVerified: boolean("phoneVerified").notNull().default(false),
     address: jsonb("address"),
     preferences: jsonb("preferences"),
     totalBookings: integer("totalBookings").notNull().default(0),
@@ -101,6 +104,7 @@ export const users = pgTable(
   },
   (t) => ({
     emailIdx: uniqueIndex("users_email_idx").on(t.email),
+    phoneIdx: uniqueIndex("users_phone_idx").on(t.phone),
   })
 );
 

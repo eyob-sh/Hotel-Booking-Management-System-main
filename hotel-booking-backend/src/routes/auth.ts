@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import verifyToken from "../middleware/auth";
 import { authLimiter } from "../middleware/rateLimiter";
+import { isEmail, normalizePhone } from "../services/phone";
 
 const router = express.Router();
 
@@ -125,7 +126,6 @@ router.post(
   "/login",
   authLimiter, 
   [
-    check("email", "Email is required").isEmail(),
     check("password", "Password with 6 or more characters required").isLength({
       min: 6,
     }),
@@ -136,13 +136,36 @@ router.post(
       return res.status(400).json({ message: errors.array() });
     }
 
-    const { email, password } = req.body;
+    // Accept an email or a phone as the login identifier. `email`/`phone`
+    // fields are still accepted for backwards compatibility.
+    const identifier = String(
+      req.body.identifier ?? req.body.email ?? req.body.phone ?? ""
+    ).trim();
+    const { password } = req.body;
+
+    if (!identifier) {
+      return res
+        .status(400)
+        .json({ message: "Email or phone number is required" });
+    }
+
+    const byEmail = isEmail(identifier);
+    const normalizedPhone = byEmail ? null : normalizePhone(identifier);
+    if (!byEmail && !normalizedPhone) {
+      return res
+        .status(400)
+        .json({ message: "Enter a valid email or phone number" });
+    }
 
     try {
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.email, email))
+        .where(
+          byEmail
+            ? eq(users.email, identifier.toLowerCase())
+            : eq(users.phone, normalizedPhone as string)
+        )
         .limit(1);
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
@@ -174,6 +197,7 @@ router.post(
         user: {
           id: user._id,
           email: user.email,
+          phone: user.phone,
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,

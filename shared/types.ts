@@ -1,11 +1,14 @@
 export type UserType = {
   _id: string;
-  email: string;
+  /** Null for phone-only accounts (Phase 2). */
+  email: string | null;
   password: string;
   firstName: string;
   lastName: string;
   role?: "user" | "admin" | "hotel_owner";
-  phone?: string;
+  /** E.164 phone — first-class identity (Phase 2). */
+  phone?: string | null;
+  phoneVerified?: boolean;
   address?: {
     street: string;
     city: string;
