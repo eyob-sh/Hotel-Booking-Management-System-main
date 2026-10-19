@@ -13,6 +13,7 @@ import {
   PaymentProviderInfo,
   CreateBookingPayload,
   CreateBookingResponse,
+  BookingLookupResponse,
 } from "../../shared/types";
 
 // --- AUTH I USER SEKCIJA ---
@@ -162,6 +163,29 @@ export const createProviderBooking = async (
   payload: CreateBookingPayload
 ): Promise<CreateBookingResponse> => {
   const response = await axiosInstance.post("/api/bookings", payload);
+  return response.data;
+};
+
+export type BookingLookupPayload = {
+  reference: string;
+  phone?: string;
+  email?: string;
+};
+
+export const lookupBooking = async (
+  payload: BookingLookupPayload
+): Promise<BookingLookupResponse> => {
+  const response = await axiosInstance.post("/api/bookings/lookup", payload);
+  return response.data;
+};
+
+export const cancelBookingByReference = async (
+  payload: BookingLookupPayload & { cancellationReason?: string }
+): Promise<{ booking: BookingType }> => {
+  const response = await axiosInstance.post(
+    "/api/bookings/lookup/cancel",
+    payload
+  );
   return response.data;
 };
 

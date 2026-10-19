@@ -2,6 +2,7 @@ import { useQuery } from "react-query";
 import * as apiClient from "../api-client";
 import BookingForm from "../forms/BookingForm/BookingForm";
 import useSearchContext from "../hooks/useSearchContext";
+import useAppContext from "../hooks/useAppContext";
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import BookingDetailsSummary from "../components/BookingDetailsSummary";
@@ -78,10 +79,8 @@ const Booking = () => {
     { enabled: !!hotelId }
   );
 
-  const { data: currentUser, isLoading: isLoadingUser } = useQuery(
-    "fetchCurrentUser",
-    apiClient.fetchCurrentUser
-  );
+  // Auth is optional here: guests book without an account.
+  const { user: currentUser, isLoading: isLoadingUser } = useAppContext();
 
   useEffect(() => {
     if (!validDates) {
@@ -236,11 +235,11 @@ const Booking = () => {
                   </div>
                 </CardContent>
               </Card>
-            ) : currentUser && quote && enabledProviders.length > 0 ? (
+            ) : quote && enabledProviders.length > 0 ? (
               <Card className="shadow-lg border-0 bg-white">
                 <CardContent className="p-0">
                   <BookingForm
-                    currentUser={currentUser}
+                    currentUser={currentUser ?? undefined}
                     hotel={hotel}
                     hotelId={hotelId as string}
                     roomTypeId={search.roomTypeId || undefined}

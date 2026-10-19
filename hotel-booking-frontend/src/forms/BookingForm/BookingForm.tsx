@@ -26,7 +26,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 type Props = {
-  currentUser: UserType;
+  /** Undefined for guest checkout (no account). */
+  currentUser?: UserType;
   hotel: HotelDetailType;
   hotelId: string;
   roomTypeId?: string;
@@ -79,6 +80,13 @@ const BookingForm = ({
     () => providers.find((p) => p.id === "pay-at-arrival")?.id || providers[0]?.id || ""
   );
 
+  const [confirmation, setConfirmation] = useState<{
+    reference: string;
+    status: string;
+    paymentStatus?: string;
+    message?: string;
+  } | null>(null);
+
   const selectedProvider = useMemo(
     () => providers.find((p) => p.id === providerId),
     [providers, providerId]
@@ -90,10 +98,10 @@ const BookingForm = ({
     formState: { errors },
   } = useForm<BookingFormData>({
     defaultValues: {
-      firstName: currentUser.firstName,
-      lastName: currentUser.lastName,
-      email: currentUser.email || "",
-      phone: currentUser.phone || "",
+      firstName: currentUser?.firstName || "",
+      lastName: currentUser?.lastName || "",
+      email: currentUser?.email || "",
+      phone: currentUser?.phone || "",
       specialRequests: "",
     },
     mode: "onChange",
@@ -135,7 +143,18 @@ const BookingForm = ({
               : "Your stay has been booked successfully!"),
           type: "SUCCESS",
         });
-        setTimeout(() => navigate("/my-bookings"), 1500);
+        // Guests have no account, so show an inline confirmation with the
+        // booking reference instead of redirecting to /my-bookings.
+        if (currentUser) {
+          setTimeout(() => navigate("/my-bookings"), 1500);
+        } else {
+          setConfirmation({
+            reference: res.booking?.reference || "",
+            status: res.booking?.status || "",
+            paymentStatus: res.booking?.paymentStatus,
+            message: res.payment?.message,
+          });
+        }
       },
       onError: (err: any) => {
         showToast({
@@ -155,6 +174,50 @@ const BookingForm = ({
 
   const dueNow = selectedProvider?.id === "pay-at-arrival" ? 0 : quote.deposit;
   const payLater = Math.round((quote.totalStored - dueNow) * 100) / 100;
+
+  if (confirmation) {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <div className="flex justify-center">
+          <CheckCircle className="h-14 w-14 text-green-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900">
+          Booking Confirmed
+        </h2>
+        <p className="text-gray-600">
+          {confirmation.message ||
+            "Thank you! Your stay has been reserved."}
+        </p>
+        {confirmation.reference && (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+            <p className="text-sm text-gray-600 mb-1">Your booking reference</p>
+            <p className="text-2xl font-mono font-bold tracking-wider text-blue-700">
+              {confirmation.reference}
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              Save this reference — you'll need it to manage your booking.
+            </p>
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Button
+            type="button"
+            onClick={() => navigate(`/detail/${hotelId}`)}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white"
+          >
+            Back to property
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/manage-booking")}
+          >
+            Manage my booking
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -184,10 +247,16 @@ const BookingForm = ({
                 </Label>
                 <Input
                   type="text"
-                  className="bg-gray-50 text-gray-600"
-                  readOnly
-                  {...register("firstName")}
+                  placeholder="First name"
+                  {...register("firstName", {
+                    required: "First name is required",
+                  })}
                 />
+                {errors.firstName && (
+                  <span className="text-red-500 text-xs">
+                    {errors.firstName.message}
+                  </span>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -196,10 +265,16 @@ const BookingForm = ({
                 </Label>
                 <Input
                   type="text"
-                  className="bg-gray-50 text-gray-600"
-                  readOnly
-                  {...register("lastName")}
+                  placeholder="Last name"
+                  {...register("lastName", {
+                    required: "Last name is required",
+                  })}
                 />
+                {errors.lastName && (
+                  <span className="text-red-500 text-xs">
+                    {errors.lastName.message}
+                  </span>
+                )}
               </div>
 
               <div className="space-y-2">

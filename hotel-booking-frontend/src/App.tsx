@@ -18,6 +18,7 @@ import EditHotel from "./pages/EditHotel";
 import Detail from "./pages/Detail";
 import Booking from "./pages/Booking";
 import MyBookings from "./pages/MyBookings";
+import ManageBooking from "./pages/ManageBooking";
 import Home from "./pages/Home";
 import ApiDocs from "./pages/ApiDocs";
 import ApiStatus from "./pages/ApiStatus";
@@ -36,6 +37,23 @@ const App = () => {
         <Route path="/" element={<Layout><Home /></Layout>} />
         <Route path="/search" element={<Navigate to="/" replace />} />
         <Route path="/detail/:hotelId" element={<Layout><Detail /></Layout>} />
+        {/* Guest checkout: booking does not require an account. */}
+        <Route
+          path="/hotel/:hotelId/booking"
+          element={
+            <Layout>
+              <Booking />
+            </Layout>
+          }
+        />
+        <Route
+          path="/manage-booking"
+          element={
+            <Layout>
+              <ManageBooking />
+            </Layout>
+          }
+        />
         <Route path="/api-docs" element={<Layout><ApiDocs /></Layout>} />
         <Route path="/api-status" element={<Layout><ApiStatus /></Layout>} />
 
@@ -58,17 +76,6 @@ const App = () => {
         />
 
         {/* LOGGED-IN USERS */}
-        <Route
-          path="/hotel/:hotelId/booking"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Booking />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
         <Route
           path="/my-bookings"
           element={

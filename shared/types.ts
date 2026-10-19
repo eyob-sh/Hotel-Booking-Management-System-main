@@ -230,6 +230,21 @@ export type CreateBookingResponse = {
   };
 };
 
+/** Guest self-service lookup — no account required (Phase 2). */
+export type BookingLookupResponse = {
+  booking: BookingType;
+  hotel: {
+    _id: string;
+    name: string;
+    city: string;
+    country: string;
+    contact?: Record<string, unknown> | null;
+  } | null;
+  freeCancellationHours: number;
+  freeCancellationUntil: string;
+  freeCancellation: boolean;
+};
+
 export type HotelSearchResponse = {
   data: HotelType[];
   pagination: {
