@@ -15,6 +15,7 @@ import SignIn from "./pages/SignIn";
 import AddHotel from "./pages/AddHotel";
 import MyHotels from "./pages/MyHotels";
 import EditHotel from "./pages/EditHotel";
+import Settings from "./pages/Settings";
 import Detail from "./pages/Detail";
 import Booking from "./pages/Booking";
 import MyBookings from "./pages/MyBookings";
@@ -116,6 +117,18 @@ const App = () => {
             <ProtectedRoute roles={["hotel_owner"]}>
               <Layout>
                 <MyHotels />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* PHASE 3: manager settings (owner + admin) */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute roles={["hotel_owner", "admin"]}>
+              <Layout>
+                <Settings />
               </Layout>
             </ProtectedRoute>
           }

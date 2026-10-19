@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import useAppContext from "../hooks/useAppContext";
 import useSearchContext from "../hooks/useSearchContext";
 import SignOutButton from "./SignOutButton";
-import { BarChart3, Building2, Calendar, LogIn } from "lucide-react";
+import { BarChart3, Building2, Calendar, LogIn, Settings } from "lucide-react";
 
 const Header = () => {
   const { isLoggedIn, user } = useAppContext();
@@ -62,6 +62,16 @@ const Header = () => {
                     >
                       <Building2 className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
                       My Hotels
+                    </Link>
+                  )}
+
+                  {(role === "hotel_owner" || role === "admin") && (
+                    <Link
+                      className="flex items-center text-white/90 hover:text-white px-4 py-2 rounded-lg font-medium hover:bg-white/10 transition-all duration-200 group"
+                      to="/settings"
+                    >
+                      <Settings className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
+                      Settings
                     </Link>
                   )}
 

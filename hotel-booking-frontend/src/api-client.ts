@@ -278,6 +278,48 @@ export const createReview = async (hotelId: string, payload: CreateReviewPayload
   return response.data;
 };
 
+// --- PHASE 3: SETTINGS + PAYMENT PROVIDERS (owner/admin) ---
+
+export type AdminProviderConfig = Record<string, any>;
+
+export type AdminPaymentProvider = {
+  id: string;
+  displayName: string;
+  kind: "online" | "onsite";
+  enabled: boolean;
+  sortOrder: number;
+  config: AdminProviderConfig;
+  available: boolean;
+};
+
+export const fetchAdminPaymentProviders = async (): Promise<{
+  providers: AdminPaymentProvider[];
+}> => {
+  const response = await axiosInstance.get("/api/admin/payment-providers");
+  return response.data;
+};
+
+export const updateAdminPaymentProvider = async (
+  id: string,
+  patch: Partial<AdminPaymentProvider>
+): Promise<AdminPaymentProvider> => {
+  const response = await axiosInstance.put(
+    `/api/admin/payment-providers/${id}`,
+    patch
+  );
+  return response.data;
+};
+
+export const fetchSettings = async (): Promise<any> => {
+  const response = await axiosInstance.get("/api/settings");
+  return response.data;
+};
+
+export const updateSettings = async (patch: any): Promise<any> => {
+  const response = await axiosInstance.put("/api/settings", patch);
+  return response.data;
+};
+
 // --- ADMIN I INSIGHTS ---
 
 export const fetchAdminDashboard = async () => {
