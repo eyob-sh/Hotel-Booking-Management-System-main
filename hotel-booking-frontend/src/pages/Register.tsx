@@ -1,5 +1,5 @@
 import { useForm } from "react-hook-form";
-import { useQueryClient } from "react-query";
+import { useQuery, useQueryClient } from "react-query";
 import { useMutationWithLoading } from "../hooks/useLoadingHooks";
 import * as apiClient from "../api-client";
 import useAppContext from "../hooks/useAppContext";
@@ -13,6 +13,7 @@ import {
   UserPlus,
   Sparkles,
   CheckCircle,
+  Phone,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../components/ui/button";
@@ -31,7 +32,9 @@ import { Badge } from "../components/ui/badge";
 export type RegisterFormData = {
   firstName: string;
   lastName: string;
-  email: string;
+  /** Email is optional when a phone number is provided (Phase 2). */
+  email?: string;
+  phone?: string;
   password: string;
   confirmPassword: string;
 };
@@ -43,6 +46,13 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const { data: publicSettings } = useQuery(
+    "publicSettings",
+    apiClient.fetchPublicSettings,
+    { staleTime: 5 * 60 * 1000, retry: false }
+  );
+  const phoneLoginEnabled = publicSettings?.features?.phoneLogin !== false;
 
   const {
     register,
@@ -205,13 +215,16 @@ const Register = () => {
                 </div>
               </div>
 
-              {/* Email Field */}
+              {/* Email Field (optional when a phone is provided) */}
               <div className="space-y-2">
                 <Label
                   htmlFor="email"
                   className="text-sm font-semibold text-gray-700"
                 >
-                  Email Address
+                  Email Address{" "}
+                  {phoneLoginEnabled && (
+                    <span className="font-normal text-gray-400">(optional)</span>
+                  )}
                 </Label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
@@ -222,7 +235,20 @@ const Register = () => {
                     type="email"
                     className="pl-10 pr-3 py-3 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-white/80 backdrop-blur-sm"
                     placeholder="Enter your email"
-                    {...register("email", { required: "Email is required" })}
+                    {...register("email", {
+                      validate: (val) => {
+                        if (!val && !(phoneLoginEnabled && watch("phone"))) {
+                          return "Enter an email or phone number";
+                        }
+                        if (
+                          val &&
+                          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)
+                        ) {
+                          return "Enter a valid email address";
+                        }
+                        return true;
+                      },
+                    })}
                   />
                 </div>
                 {errors.email && (
@@ -237,6 +263,31 @@ const Register = () => {
                   </div>
                 )}
               </div>
+
+              {/* Phone Field (Phase 2: phone-first identity) */}
+              {phoneLoginEnabled && (
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="phone"
+                    className="text-sm font-semibold text-gray-700"
+                  >
+                    Phone Number{" "}
+                    <span className="font-normal text-gray-400">(optional)</span>
+                  </Label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                      <Phone className="h-6 w-6 text-gray-600" />
+                    </div>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      className="pl-10 pr-3 py-3 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-white/80 backdrop-blur-sm"
+                      placeholder="+251 9XX XXX XXX"
+                      {...register("phone")}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Password Field */}
               <div className="space-y-2">

@@ -29,6 +29,22 @@ export const signIn = async (formData: SignInFormData) => {
   return response.data;
 };
 
+export type PublicSettings = {
+  currency: string;
+  features: {
+    phoneLogin: boolean;
+    otpEnabled: boolean;
+    reviewsEnabled: boolean;
+    telegramEnabled: boolean;
+  };
+  [key: string]: unknown;
+};
+
+export const fetchPublicSettings = async (): Promise<PublicSettings> => {
+  const response = await axiosInstance.get("/api/settings/public");
+  return response.data;
+};
+
 export const validateToken = async () => {
   const response = await axiosInstance.get("/api/auth/validate-token");
   return response.data;

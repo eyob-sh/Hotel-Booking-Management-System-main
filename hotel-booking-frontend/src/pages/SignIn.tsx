@@ -1,5 +1,5 @@
 import { useForm } from "react-hook-form";
-import { useQueryClient } from "react-query";
+import { useQuery, useQueryClient } from "react-query";
 import { useMutationWithLoading } from "../hooks/useLoadingHooks";
 import * as apiClient from "../api-client";
 import useAppContext from "../hooks/useAppContext";
@@ -20,7 +20,8 @@ import { Separator } from "../components/ui/separator";
 import { Badge } from "../components/ui/badge";
 
 export type SignInFormData = {
-  email: string;
+  /** Email address or phone number (Phase 2). */
+  identifier: string;
   password: string;
 };
 
@@ -32,6 +33,13 @@ const SignIn = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const location = useLocation();
+
+  const { data: publicSettings } = useQuery(
+    "publicSettings",
+    apiClient.fetchPublicSettings,
+    { staleTime: 5 * 60 * 1000, retry: false }
+  );
+  const phoneLoginEnabled = publicSettings?.features?.phoneLogin !== false;
 
   const {
     register,
@@ -111,34 +119,40 @@ const SignIn = () => {
           {/* Form */}
           <CardContent className="space-y-6">
             <form className="space-y-6" onSubmit={onSubmit}>
-              {/* Email Field */}
+              {/* Email or Phone Field */}
               <div className="space-y-2">
                 <Label
-                  htmlFor="email"
+                  htmlFor="identifier"
                   className="text-sm font-semibold text-gray-700"
                 >
-                  Email Address
+                  {phoneLoginEnabled ? "Email or Phone Number" : "Email Address"}
                 </Label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
                     <Mail className="h-6 w-6 text-gray-600" />
                   </div>
                   <Input
-                    id="email"
-                    type="email"
+                    id="identifier"
+                    type={phoneLoginEnabled ? "text" : "email"}
                     className="pl-10 pr-3 py-3 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-white/80 backdrop-blur-sm"
-                    placeholder="Enter your email"
-                    {...register("email", { required: "Email is required" })}
+                    placeholder={
+                      phoneLoginEnabled
+                        ? "you@example.com or +251 9XX XXX XXX"
+                        : "Enter your email"
+                    }
+                    {...register("identifier", {
+                      required: "Email or phone is required",
+                    })}
                   />
                 </div>
-                {errors.email && (
+                {errors.identifier && (
                   <div className="flex items-center mt-1">
                     <Badge
                       variant="outline"
                       className="text-red-500 border-red-200 bg-red-50"
                     >
                       <Sparkles className="w-4 h-4 mr-1" />
-                      {errors.email.message}
+                      {errors.identifier.message}
                     </Badge>
                   </div>
                 )}
