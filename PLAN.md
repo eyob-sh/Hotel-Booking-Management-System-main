@@ -194,22 +194,25 @@ plus Phase 0 regression (55 HTTP + 24 services) all green.
 becomes a first-class identity so phone-only guests and users both work.
 
 **Guest checkout**
-- [ ] `bookings.userId` → **nullable** (migration `0003`); `createBooking` accepts a guest (no user)
+- [x] `bookings.userId` → **nullable** (migration `0003`); `createBooking` accepts a guest (no user)
   and skips the `users` stats update when `userId` is null.
-- [ ] `optionalAuth` middleware (sets `req.userId` only when a valid cookie is present, otherwise
+- [x] `optionalAuth` middleware (sets `req.userId` only when a valid cookie is present, otherwise
   continues) → used on `POST /api/bookings` with `userId: req.userId || null`.
-- [ ] Frontend: booking route is **public** (drop `ProtectedRoute`); first/last name editable for
+- [x] Frontend: booking route is **public** (drop `ProtectedRoute`); first/last name editable for
   guests; on success show a confirmation with the booking `reference`; guests are **not** redirected
   to `/my-bookings`.
-- [ ] **Manage my booking** page: look up by `reference` + phone/email → view / cancel
-  (honours `settings.freeCancellationHours`).
+- [x] **Manage my booking** page (`/manage-booking`): look up by `reference` + phone/email →
+  view / cancel (honours `settings.freeCancellationHours`).
+  Backend: `POST /api/bookings/lookup` + `POST /api/bookings/lookup/cancel` (rate-limited,
+  no account needed).
 
 **Phone identity**
-- [ ] `users.email` → nullable; add `phone` (E.164, UNIQUE), `phoneVerified BOOLEAN`; later `telegramId`.
-- [ ] Register/login `identifier` = email **or** phone (reuse existing password flow — no SMS provider needed now).
-- [ ] Booking requires `phone` (email optional); `bookings.email` NOT NULL relaxed, `phone` required.
-  *(Already true from Phase 1 — verify.)*
-- [ ] Frontend: phone field on register/sign-in/checkout (respect `settings.features.phoneLogin`).
+- [x] `users.email` → nullable (migration `0004`); add `phone` (E.164, UNIQUE), `phoneVerified BOOLEAN`;
+  later `telegramId`.
+- [x] Register/login `identifier` = email **or** phone (reuse existing password flow — no SMS provider needed now).
+- [x] Booking requires `phone` (email optional); `bookings.email` NOT NULL relaxed, `phone` required.
+  *(Already true from Phase 1 — verified.)*
+- [x] Frontend: phone field on register/sign-in/checkout (respect `settings.features.phoneLogin`).
 - [ ] (Later) SMS OTP behind `features.otpEnabled`.
 
 **Acceptance:** guest books with only a phone (no account); phone-only user registers, logs in, books
@@ -267,11 +270,12 @@ with phone; email-only user still works.
 | `hotel-booking-backend/src/index.ts` | requiredEnvVars, CORS `:77-82`, `/uploads` before helmet `:123`, route mounting |
 | `src/db/schema.ts` | 6 tables + enums — base for room_types/room_inventory/settings/payments |
 | `src/db/index.ts` | pg Pool singleton, table re-exports, check/close connection |
-| `src/middleware/auth.ts` | `verifyToken` reads cookie `auth_token`, sets `req.userId`/`req.userRole` |
-| `src/routes/hotels.ts` | search; payment-intent `:281`; **confirm-booking `:408` (client-total trust hole)** |
-| `src/routes/bookings.ts` | **ownership holes `:182`, `:274`, `:359`; DELETE `:382`** |
+| `src/middleware/auth.ts` | `verifyToken` + `optionalAuth` (guest checkout) — reads cookie `auth_token` |
+| `src/services/phone.ts` | `normalizePhone` (E.164, Ethiopia default) + `isEmail` — phone identity |
+| `src/routes/bookings.ts` | v2 checkout; **guest lookup** `POST /lookup` + `/lookup/cancel`; ownership guarded |
+| `src/routes/quotes.ts`, `src/routes/payments.ts` | server quotes + provider checkout + webhooks |
 | `src/routes/my-hotels.ts` | local-disk `uploadImages`/`filenameFromUrl`/`UPLOAD_DIR` ~`:526-560` |
-| `src/routes/users.ts`, `src/routes/auth.ts` | register/login → extend for phone `identifier` |
+| `src/routes/users.ts`, `src/routes/auth.ts` | register/login accept email **or** phone `identifier` |
 | `hotel-booking-backend/.env`, `.env.example` | DB, JWT/REFRESH secrets, Cloudinary/Stripe (now optional) |
 | `hotel-booking-backend/drizzle/0000_classy_rattler.sql` | applied migration |
 
@@ -282,8 +286,10 @@ with phone; email-only user still works.
 | `src/App.tsx` | route map + role guards — rework for single-property |
 | `src/lib/api-client.ts` | axios baseURL `http://localhost:7002`, withCredentials, 401 refresh |
 | `src/forms/ManageHotelForm/*` | → property/rooms editor |
-| `src/pages/Booking*`, `src/forms/BookingForm/*` | → checkout with deposit split |
-| `shared/types.ts` | shared API contract — add phone/currency/room types here |
+| `src/pages/Booking.tsx` | **public** guest checkout (server quote + provider picker) |
+| `src/pages/ManageBooking.tsx` | guest self-service lookup + cancel (`/manage-booking`) |
+| `src/forms/BookingForm/*` | checkout with deposit split; guest confirmation w/ reference |
+| `shared/types.ts` | shared API contract — `BookingLookupResponse`, phone fields |
 
 ## 5. Session resume checklist
 
@@ -292,7 +298,14 @@ with phone; email-only user still works.
    - Backend: `node dist/hotel-booking-backend/src/index.js` (rebuild: `npm run build` in backend dir).
    - Frontend: `node node_modules/vite/bin/vite.js --port 5174`.
 3. Check current phase checkbox status above → continue from first unchecked phase.
-4. After any code change: backend `tsc` must be clean; run frontend dev-server transform check.
+4. After any code change: backend `tsc` must be clean; frontend `npm run build` + `npx eslint` clean.
+5. Verify with the HTTP suites (from the backend dir). **Restart the backend between runs** — the auth
+   limiter is 10 req/15min per IP (register+login share it):
+   - `node scripts/phase2-http-test.cjs` → 11/11 (phone identity)
+   - `node scripts/phase1-http-test.cjs` → 61/61 (quotes, inventory, providers, guest checkout, lookup)
+   - `node scripts/phase0-http-test.cjs` → 55/55
+   - `npx ts-node --transpile-only scripts/phase0-services-test.ts` → 24/24
+   - Apply migrations: `node scripts/apply-migration.cjs drizzle/<file>.sql`
 
 ---
 
@@ -303,7 +316,8 @@ Ethiopia-first** deployment. Not yet scheduled into the numbered phases above �
 a phase completes. ★ = my top value/effort picks.
 
 ### Tier 1 — Booking experience (guests expect these)
-- ★ **Manage my booking** lookup (reference + phone/email) — view/cancel/modify. *(part of Phase 2)*
+- ✅ **Manage my booking** lookup (reference + phone/email) — view/cancel done in Phase 2
+  (`/manage-booking`); *modify* (change dates) still open.
 - ★ **Visual availability calendar** per room type (booked/free nights).
 - **Bookable extras/add-ons** — airport pickup, breakfast, late checkout, extra bed (per-night or flat).
 - **Promo/coupon codes** + automatic discounts (long-stay, early-bird, seasonal).
