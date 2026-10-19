@@ -13,9 +13,9 @@ import { Toaster } from "./components/ui/toaster";
 import Register from "./pages/Register";
 import SignIn from "./pages/SignIn";
 import AddHotel from "./pages/AddHotel";
-import MyHotels from "./pages/MyHotels";
-import ManageRooms from "./pages/ManageRooms";
+import ManageBookings from "./pages/ManageBookings";
 import EditHotel from "./pages/EditHotel";
+import MyHotels from "./pages/MyHotels";
 import Settings from "./pages/Settings";
 import Detail from "./pages/Detail";
 import Booking from "./pages/Booking";
@@ -123,13 +123,13 @@ const App = () => {
           }
         />
 
-        {/* PHASE 3: rooms CRUD (owner + admin) */}
+        {/* PHASE 3: booking management (owner + admin) */}
         <Route
-          path="/my-hotels/:hotelId/rooms"
+          path="/my-hotels/:hotelId/bookings"
           element={
             <ProtectedRoute roles={["hotel_owner", "admin"]}>
               <Layout>
-                <ManageRooms />
+                <ManageBookings />
               </Layout>
             </ProtectedRoute>
           }

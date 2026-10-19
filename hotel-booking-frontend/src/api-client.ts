@@ -396,6 +396,104 @@ export const deleteRoomType = async (
   return response.data;
 };
 
+// --- PHASE 3c: BOOKING MANAGEMENT (owner/admin) ---
+
+export type ManagementPayment = {
+  _id: string;
+  bookingId: string;
+  providerId: string;
+  type: "deposit" | "balance" | "refund" | "charge";
+  amount: number;
+  currency: string;
+  status: "pending" | "succeeded" | "failed" | "refunded";
+  providerRef: string | null;
+  createdAt?: string;
+};
+
+export type ManagementBooking = BookingType & {
+  roomTypeName?: string | null;
+  payments?: ManagementPayment[];
+  paidAmount?: number;
+  refundedAmount?: number;
+  netPaid?: number;
+};
+
+export type ManagementBookingsParams = {
+  status?: string;
+  checkInFrom?: string;
+  checkInTo?: string;
+};
+
+export const fetchManagementBookings = async (
+  hotelId: string,
+  params?: ManagementBookingsParams
+): Promise<{ bookings: ManagementBooking[] }> => {
+  const query = new URLSearchParams();
+  if (params?.status) query.append("status", params.status);
+  if (params?.checkInFrom) query.append("checkInFrom", params.checkInFrom);
+  if (params?.checkInTo) query.append("checkInTo", params.checkInTo);
+  const qs = query.toString();
+  const response = await axiosInstance.get(
+    `/api/management/hotels/${hotelId}/bookings${qs ? `?${qs}` : ""}`
+  );
+  return response.data;
+};
+
+export type RecordPaymentPayload = {
+  amount: number;
+  providerId?: string;
+  reference?: string;
+  note?: string;
+  method?: string;
+};
+
+export const recordBookingPayment = async (
+  bookingId: string,
+  payload: RecordPaymentPayload
+): Promise<{
+  payment: ManagementPayment;
+  booking: ManagementBooking;
+  remaining: number;
+}> => {
+  const response = await axiosInstance.post(
+    `/api/management/bookings/${bookingId}/payments`,
+    payload
+  );
+  return response.data;
+};
+
+export type IssueRefundPayload = {
+  amount: number;
+  reason?: string;
+  reference?: string;
+};
+
+export const issueBookingRefund = async (
+  bookingId: string,
+  payload: IssueRefundPayload
+): Promise<{
+  refund: ManagementPayment;
+  booking: ManagementBooking;
+  refunded: number;
+}> => {
+  const response = await axiosInstance.post(
+    `/api/management/bookings/${bookingId}/refunds`,
+    payload
+  );
+  return response.data;
+};
+
+export const updateBookingStatus = async (
+  bookingId: string,
+  payload: { status: string; cancellationReason?: string; refundAmount?: number }
+): Promise<BookingType> => {
+  const response = await axiosInstance.patch(
+    `/api/bookings/${bookingId}/status`,
+    payload
+  );
+  return response.data;
+};
+
 // --- ADMIN I INSIGHTS ---
 
 export const fetchAdminDashboard = async () => {

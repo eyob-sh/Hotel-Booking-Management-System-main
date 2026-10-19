@@ -304,6 +304,13 @@ const MyHotels = () => {
                   <BedDouble className="w-4 h-4 mr-2" />
                   Manage Rooms
                 </Link>
+                <Link
+                  to={`/my-hotels/${hotel._id}/bookings`}
+                  className="flex-1 bg-white border border-green-200 text-green-700 py-2.5 px-4 rounded-xl font-semibold hover:bg-green-50 transition-colors text-center flex items-center justify-center"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Manage Bookings
+                </Link>
               </div>
             </div>
           </div>
