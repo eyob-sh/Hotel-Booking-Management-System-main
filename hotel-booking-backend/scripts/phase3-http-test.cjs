@@ -1,6 +1,6 @@
 // Phase 3 HTTP contract checks. Run from the backend directory:
 //   node scripts/phase3-http-test.cjs
-// NOTE: register+login share a 10 req/15min IP limiter — restart the backend
+// NOTE: register+login share a 10 req/15min IP limiter ï¿½ restart the backend
 // between runs or re-runs will 429.
 const path = require("path");
 require("dotenv").config({ path: path.join(process.cwd(), ".env") });
@@ -47,6 +47,8 @@ const req = async (method, url, opts = {}) => {
   await pg.connect();
 
   // ---- cleanup ----
+  await pg.query(`DELETE FROM room_inventory WHERE "roomTypeId" IN (SELECT "_id" FROM room_types WHERE "hotelId" IN (SELECT "_id" FROM hotels WHERE name LIKE 'P3 %'))`);
+  await pg.query(`DELETE FROM room_types WHERE "hotelId" IN (SELECT "_id" FROM hotels WHERE name LIKE 'P3 %')`);
   await pg.query(`DELETE FROM bookings WHERE email LIKE 'p3-%@test.com'`);
   await pg.query(`DELETE FROM hotels WHERE name LIKE 'P3 %'`);
   await pg.query(`DELETE FROM users WHERE email LIKE 'p3-%@test.com'`);
@@ -160,6 +162,145 @@ const req = async (method, url, opts = {}) => {
     body: { enabled: false },
   });
   check("3a PUT provider as guest -> 403", guestPut.status === 403, guestPut.status);
+
+  // ============================================================
+  // 3b. room types CRUD
+  // ============================================================
+  const roomsBase = `${BASE}/my-hotels/${hotelId}/rooms`;
+
+  const roomsNoAuth = await req("GET", roomsBase);
+  check("3b GET rooms w/o auth -> 401", roomsNoAuth.status === 401, roomsNoAuth.status);
+
+  const roomsGuest = await req("GET", roomsBase, { cookie: cookies.guest });
+  check("3b GET rooms as guest -> 403", roomsGuest.status === 403, roomsGuest.status);
+
+  const roomsOwner0 = await req("GET", roomsBase, { cookie: cookies.owner });
+  check("3b GET rooms as owner -> 200", roomsOwner0.status === 200, roomsOwner0.status);
+  check("3b rooms list starts empty", Array.isArray(roomsOwner0.data?.roomTypes) && roomsOwner0.data.roomTypes.length === 0, roomsOwner0.data);
+
+  const roomsAdmin0 = await req("GET", roomsBase, { cookie: cookies.admin });
+  check("3b GET rooms as admin -> 200", roomsAdmin0.status === 200, roomsAdmin0.status);
+
+  // create (JSON photos payload)
+  const createRoom = await req("POST", roomsBase, {
+    cookie: cookies.owner,
+    body: {
+      name: "Deluxe King",
+      description: "City view",
+      maxAdults: 2,
+      maxChildren: 1,
+      basePrice: 1500,
+      roomCount: 3,
+      sortOrder: 1,
+      active: true,
+      photos: ["https://example.com/r1.jpg", "https://example.com/r2.jpg"],
+    },
+  });
+  check("3b POST create room -> 201", createRoom.status === 201, createRoom.status);
+  const room1 = createRoom.data;
+  check("3b create returned fields", room1?._id && room1?.name === "Deluxe King" && room1?.basePrice === 1500 && room1?.roomCount === 3, room1);
+  check("3b create stored photos", Array.isArray(room1?.photos) && room1.photos.length === 2, room1?.photos);
+
+  // validation errors
+  const badRoom = await req("POST", roomsBase, {
+    cookie: cookies.owner,
+    body: { name: "", basePrice: -5 },
+  });
+  check("3b POST invalid room -> 400", badRoom.status === 400, badRoom.status);
+
+  const guestCreate = await req("POST", roomsBase, {
+    cookie: cookies.guest,
+    body: { name: "Sneaky", basePrice: 100 },
+  });
+  check("3b POST room as guest -> 403", guestCreate.status === 403, guestCreate.status);
+
+  // create a second room so delete tests have one to burn
+  const createRoom2 = await req("POST", roomsBase, {
+    cookie: cookies.owner,
+    body: { name: "Standard Twin", maxAdults: 2, maxChildren: 0, basePrice: 900, roomCount: 2, sortOrder: 2, photos: [] },
+  });
+  check("3b POST create second room -> 201", createRoom2.status === 201, createRoom2.status);
+  const room2 = createRoom2.data;
+
+  const listAfterCreate = await req("GET", roomsBase, { cookie: cookies.owner });
+  check("3b GET lists 2 rooms", listAfterCreate.data?.roomTypes?.length === 2, listAfterCreate.data?.roomTypes?.length);
+  check(
+    "3b rooms sorted by sortOrder",
+    listAfterCreate.data?.roomTypes?.[0]?.name === "Deluxe King",
+    listAfterCreate.data?.roomTypes?.map((r) => r.name)
+  );
+
+  // update
+  const updateRoom = await req("PUT", `${roomsBase}/${room1._id}`, {
+    cookie: cookies.owner,
+    body: { name: "Deluxe King (renamed)", basePrice: 1750, roomCount: 4, maxAdults: 3, active: false, photos: ["https://example.com/r1.jpg"] },
+  });
+  check("3b PUT update room -> 200", updateRoom.status === 200, updateRoom.status);
+  check(
+    "3b PUT applied fields",
+    updateRoom.data?.name === "Deluxe King (renamed)" && updateRoom.data?.basePrice === 1750 && updateRoom.data?.roomCount === 4 && updateRoom.data?.maxAdults === 3 && updateRoom.data?.active === false,
+    updateRoom.data
+  );
+  check("3b PUT kept kept photos only", updateRoom.data?.photos?.length === 1 && updateRoom.data.photos[0] === "https://example.com/r1.jpg", updateRoom.data?.photos);
+
+  // inventory reconcile: a future date still tracking the current count (4)
+  // gets bumped to the new count (5); a hand-adjusted date is left alone.
+  const futureA = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+  const futureB = new Date(Date.now() + 4 * 864e5).toISOString().slice(0, 10);
+  await pg.query(
+    `INSERT INTO room_inventory ("roomTypeId","date","totalRooms","reserved","updatedAt")
+     VALUES ($1,$2,4,1,now()),
+            ($1,$3,9,0,now())`,
+    [room1._id, futureA, futureB]
+  );
+  const recount = await req("PUT", `${roomsBase}/${room1._id}`, {
+    cookie: cookies.owner,
+    body: { roomCount: 5 },
+  });
+  check("3b recount -> 200", recount.status === 200, recount.status);
+  const bumpedRow = await pg.query(
+    `SELECT "totalRooms","reserved" FROM room_inventory WHERE "roomTypeId"=$1 AND "date"=$2`,
+    [room1._id, futureA]
+  );
+  const keptRow = await pg.query(
+    `SELECT "totalRooms" FROM room_inventory WHERE "roomTypeId"=$1 AND "date"=$2`,
+    [room1._id, futureB]
+  );
+  check("3b inventory bumped with room count", bumpedRow.rows[0]?.totalRooms === 5 && bumpedRow.rows[0]?.reserved === 1, bumpedRow.rows);
+  check("3b hand-adjusted date untouched", keptRow.rows[0]?.totalRooms === 9, keptRow.rows);
+
+  // access control on another owner's hotel
+  const hotel2Res = await pg.query(
+    `INSERT INTO hotels ("userId","name","city","country","description","type","adultCount","childCount","facilities","pricePerNight","starRating","imageUrls","lastUpdated")
+     VALUES ($1,'P3 Other Hotel','Addis Ababa','Ethiopia','other',ARRAY['hotel']::text[],2,0,ARRAY['wifi']::text[],1000,4,ARRAY[]::text[], now())
+     RETURNING "_id"`,
+    [ids.admin]
+  );
+  const hotel2Id = hotel2Res.rows[0]._id;
+  const crossHotel = await req("GET", `${BASE}/my-hotels/${hotel2Id}/rooms`, { cookie: cookies.owner });
+  check("3b owner cannot read other owner's rooms -> 403", crossHotel.status === 403, crossHotel.status);
+
+  // delete protected by live reservations
+  const holding = await pg.query(
+    `SELECT count(*)::int AS n FROM room_inventory WHERE "roomTypeId"=$1 AND reserved > 0`,
+    [room1._id]
+  );
+  check("3b fixture has reserved rooms", holding.rows[0].n > 0, holding.rows[0].n);
+  const deleteHeld = await req("DELETE", `${roomsBase}/${room1._id}`, { cookie: cookies.owner });
+  check("3b DELETE held room -> 409", deleteHeld.status === 409, deleteHeld.status);
+
+  // deactivate instead, then free the inventory and delete for real
+  await req("PUT", `${roomsBase}/${room1._id}`, { cookie: cookies.owner, body: { active: true, roomCount: 5 } });
+  await pg.query(`UPDATE room_inventory SET reserved = 0 WHERE "roomTypeId"=$1`, [room1._id]);
+  const deleteRoom2 = await req("DELETE", `${roomsBase}/${room2._id}`, { cookie: cookies.owner });
+  check("3b DELETE free room -> 200", deleteRoom2.status === 200, deleteRoom2.status);
+  const listAfterDelete = await req("GET", roomsBase, { cookie: cookies.owner });
+  check("3b room removed from list", listAfterDelete.data?.roomTypes?.length === 1, listAfterDelete.data?.roomTypes?.length);
+  const invAfterDelete = await pg.query(`SELECT count(*)::int AS n FROM room_inventory WHERE "roomTypeId"=$1`, [room2._id]);
+  check("3b inventory rows cleaned up", invAfterDelete.rows[0].n === 0, invAfterDelete.rows[0].n);
+
+  const deleteUnknown = await req("DELETE", `${roomsBase}/00000000-0000-4000-8000-000000000000`, { cookie: cookies.owner });
+  check("3b DELETE unknown room -> 404", deleteUnknown.status === 404, deleteUnknown.status);
 
   await pg.end();
 
