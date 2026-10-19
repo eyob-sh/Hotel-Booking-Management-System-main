@@ -320,6 +320,82 @@ export const updateSettings = async (patch: any): Promise<any> => {
   return response.data;
 };
 
+// --- PHASE 3: ROOM TYPES (owner/admin) ---
+
+export type RoomTypeAdmin = {
+  _id: string;
+  hotelId: string;
+  name: string;
+  description: string | null;
+  maxAdults: number;
+  maxChildren: number;
+  basePrice: number;
+  roomCount: number;
+  photos: string[];
+  sortOrder: number;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type RoomTypePayload = {
+  name?: string;
+  description?: string;
+  maxAdults?: number;
+  maxChildren?: number;
+  basePrice?: number;
+  roomCount?: number;
+  sortOrder?: number;
+  active?: boolean;
+  photos?: string[];
+};
+
+export const fetchRoomTypes = async (
+  hotelId: string
+): Promise<{ roomTypes: RoomTypeAdmin[] }> => {
+  const response = await axiosInstance.get(`/api/my-hotels/${hotelId}/rooms`);
+  return response.data;
+};
+
+export const createRoomType = async (
+  hotelId: string,
+  payload: RoomTypePayload | FormData
+): Promise<RoomTypeAdmin> => {
+  const response = await axiosInstance.post(
+    `/api/my-hotels/${hotelId}/rooms`,
+    payload,
+    payload instanceof FormData
+      ? { headers: { "Content-Type": "multipart/form-data" } }
+      : undefined
+  );
+  return response.data;
+};
+
+export const updateRoomType = async (
+  hotelId: string,
+  roomTypeId: string,
+  payload: RoomTypePayload | FormData
+): Promise<RoomTypeAdmin> => {
+  const response = await axiosInstance.put(
+    `/api/my-hotels/${hotelId}/rooms/${roomTypeId}`,
+    payload,
+    payload instanceof FormData
+      ? { headers: { "Content-Type": "multipart/form-data" } }
+      : undefined
+  );
+  return response.data;
+};
+
+export const deleteRoomType = async (
+  hotelId: string,
+  roomTypeId: string
+): Promise<{ message: string }> => {
+  const response = await axiosInstance.delete(
+    `/api/my-hotels/${hotelId}/rooms/${roomTypeId}`
+  );
+  return response.data;
+};
+
 // --- ADMIN I INSIGHTS ---
 
 export const fetchAdminDashboard = async () => {

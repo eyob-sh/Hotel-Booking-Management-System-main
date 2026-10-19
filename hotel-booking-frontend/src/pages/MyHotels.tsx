@@ -12,6 +12,7 @@ import {
   Star,
   Building2,
   Calendar,
+  BedDouble,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import BookingLogModal from "../components/BookingLogModal";
@@ -292,6 +293,17 @@ const MyHotels = () => {
                   <Calendar className="w-4 h-4 mr-2" />
                   Booking Log
                 </button>
+              </div>
+
+              {/* Phase 3: secondary row */}
+              <div className="flex space-x-3 mt-3">
+                <Link
+                  to={`/my-hotels/${hotel._id}/rooms`}
+                  className="flex-1 bg-white border border-primary-200 text-primary-700 py-2.5 px-4 rounded-xl font-semibold hover:bg-primary-50 transition-colors text-center flex items-center justify-center"
+                >
+                  <BedDouble className="w-4 h-4 mr-2" />
+                  Manage Rooms
+                </Link>
               </div>
             </div>
           </div>
