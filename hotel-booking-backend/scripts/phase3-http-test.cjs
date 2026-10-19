@@ -47,6 +47,7 @@ const req = async (method, url, opts = {}) => {
   await pg.connect();
 
   // ---- cleanup ----
+  await pg.query(`DELETE FROM payments WHERE "bookingId" IN (SELECT "_id" FROM bookings WHERE email LIKE 'p3-%@test.com')`);
   await pg.query(`DELETE FROM room_inventory WHERE "roomTypeId" IN (SELECT "_id" FROM room_types WHERE "hotelId" IN (SELECT "_id" FROM hotels WHERE name LIKE 'P3 %'))`);
   await pg.query(`DELETE FROM room_types WHERE "hotelId" IN (SELECT "_id" FROM hotels WHERE name LIKE 'P3 %')`);
   await pg.query(`DELETE FROM bookings WHERE email LIKE 'p3-%@test.com'`);
@@ -301,6 +302,137 @@ const req = async (method, url, opts = {}) => {
 
   const deleteUnknown = await req("DELETE", `${roomsBase}/00000000-0000-4000-8000-000000000000`, { cookie: cookies.owner });
   check("3b DELETE unknown room -> 404", deleteUnknown.status === 404, deleteUnknown.status);
+
+  // ============================================================
+  // 3c. booking management: record payments + refunds
+  // ============================================================
+  const mgBookings = `${BASE}/management/hotels/${hotelId}/bookings`;
+
+  const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const newBooking = async (overrides = {}) =>
+    req("POST", `${BASE}/bookings`, {
+      body: {
+        hotelId,
+        roomTypeId: room1._id,
+        checkIn: day(10),
+        checkOut: day(12),
+        adultCount: 2,
+        childCount: 0,
+        firstName: "P3",
+        lastName: "Guest",
+        email: "p3-guest@test.com",
+        phone: "+251911000000",
+        providerId: "pay-at-arrival",
+        ...overrides,
+      },
+    });
+
+  const mk = await newBooking();
+  check("3c create pay-at-arrival booking -> 201", mk.status === 201, mk.data);
+  const booking = mk.data?.booking;
+  const total = Number(booking?.totalCost);
+  check("3c booking priced server-side", Number.isFinite(total) && total > 0, total);
+  check("3c pay-at-arrival booking confirmed", booking?.status === "confirmed", booking?.status);
+  check("3c booking starts unpaid", booking?.paymentStatus === "pending", booking?.paymentStatus);
+
+  const mgNoAuth = await req("GET", mgBookings);
+  check("3c GET management bookings w/o auth -> 401", mgNoAuth.status === 401, mgNoAuth.status);
+  const mgGuest = await req("GET", mgBookings, { cookie: cookies.guest });
+  check("3c GET management bookings as guest -> 403", mgGuest.status === 403, mgGuest.status);
+  const mgOwner = await req("GET", mgBookings, { cookie: cookies.owner });
+  check("3c GET management bookings as owner -> 200", mgOwner.status === 200, mgOwner.status);
+  const listed = (mgOwner.data?.bookings || []).find((b) => b._id === booking._id);
+  check("3c management list includes booking", Boolean(listed), mgOwner.data?.bookings?.length);
+  check("3c management list carries room type name", listed?.roomTypeName === "Deluxe King (renamed)", listed?.roomTypeName);
+  // pay-at-arrival books a pending "balance" ledger row at checkout time
+  check("3c management list carries payments", Array.isArray(listed?.payments) && listed.payments.length > 0, listed?.payments?.length);
+  check("3c listing shows nothing collected yet", Number(listed?.paidAmount) === 0 && listed?.payments?.every((p) => p.status === "pending"), { paid: listed?.paidAmount, statuses: listed?.payments?.map((p) => p.status) });
+  const mgAdmin = await req("GET", mgBookings, { cookie: cookies.admin });
+  check("3c GET management bookings as admin -> 200", mgAdmin.status === 200, mgAdmin.status);
+  const mgFiltered = await req("GET", `${mgBookings}?status=confirmed`, { cookie: cookies.owner });
+  check("3c management list filters by status", (mgFiltered.data?.bookings || []).length > 0 && (mgFiltered.data?.bookings || []).every((b) => b.status === "confirmed"), mgFiltered.data?.bookings?.map((b) => b.status));
+
+  const half = Math.round(total / 2);
+  const pay1 = await req("POST", `${BASE}/management/bookings/${booking._id}/payments`, {
+    cookie: cookies.owner,
+    body: { amount: half, reference: "RCPT-1" },
+  });
+  check("3c record partial payment -> 201", pay1.status === 201, pay1.data);
+  check("3c partial payment -> deposit_paid", pay1.data?.booking?.paymentStatus === "deposit_paid", pay1.data?.booking?.paymentStatus);
+  check("3c partial payment reduces balance", Math.abs(Number(pay1.data?.remaining) - (total - half)) < 0.02, pay1.data?.remaining);
+  check("3c ledger row written", pay1.data?.payment?.type === "deposit" && pay1.data?.payment?.status === "succeeded", pay1.data?.payment);
+
+  const overpay = await req("POST", `${BASE}/management/bookings/${booking._id}/payments`, {
+    cookie: cookies.owner,
+    body: { amount: total },
+  });
+  check("3c overpayment -> 400", overpay.status === 400, overpay.status);
+
+  const pay2 = await req("POST", `${BASE}/management/bookings/${booking._id}/payments`, {
+    cookie: cookies.owner,
+    body: { amount: total - half },
+  });
+  check("3c settle balance -> 201", pay2.status === 201, pay2.status);
+  check("3c booking marked paid", pay2.data?.booking?.paymentStatus === "paid", pay2.data?.booking?.paymentStatus);
+  check("3c balance cleared", Number(pay2.data?.remaining) === 0, pay2.data?.remaining);
+
+  const guestPay = await req("POST", `${BASE}/management/bookings/${booking._id}/payments`, {
+    cookie: cookies.guest,
+    body: { amount: 10 },
+  });
+  check("3c guest record payment -> 403", guestPay.status === 403, guestPay.status);
+
+  const overRefund = await req("POST", `${BASE}/management/bookings/${booking._id}/refunds`, {
+    cookie: cookies.owner,
+    body: { amount: total + 100 },
+  });
+  check("3c over-refund -> 400", overRefund.status === 400, overRefund.status);
+
+  const refund1 = await req("POST", `${BASE}/management/bookings/${booking._id}/refunds`, {
+    cookie: cookies.owner,
+    body: { amount: 500, reason: "Early checkout" },
+  });
+  check("3c partial refund -> 201", refund1.status === 201, refund1.data);
+  check("3c partial refund -> partially_refunded", refund1.data?.booking?.paymentStatus === "partially_refunded", refund1.data?.booking?.paymentStatus);
+  check("3c refundAmount tracked", Math.abs(Number(refund1.data?.booking?.refundAmount) - 500) < 0.02, refund1.data?.booking?.refundAmount);
+  check("3c refund ledger row written", refund1.data?.refund?.type === "refund", refund1.data?.refund?.type);
+
+  const refund2 = await req("POST", `${BASE}/management/bookings/${booking._id}/refunds`, {
+    cookie: cookies.owner,
+    body: { amount: total - 500 },
+  });
+  check("3c full refund -> 201", refund2.status === 201, refund2.status);
+  check("3c booking marked refunded", refund2.data?.booking?.paymentStatus === "refunded", refund2.data?.booking?.paymentStatus);
+
+  // bank transfer: pending until the manager records the money
+  const btRes = await newBooking({ providerId: "bank-transfer", phone: "+251911000001" });
+  check("3c create bank-transfer booking -> 201", btRes.status === 201, btRes.data);
+  const bt = btRes.data?.booking;
+  check("3c bank-transfer booking is pending", bt?.status === "pending", bt?.status);
+  const btPay = await req("POST", `${BASE}/management/bookings/${bt._id}/payments`, {
+    cookie: cookies.owner,
+    body: { amount: bt.totalCost, reference: "TRF-1" },
+  });
+  check("3c transfer recorded -> 201", btPay.status === 201, btPay.data);
+  check("3c transfer confirms pending booking", btPay.data?.booking?.status === "confirmed", btPay.data?.booking?.status);
+  check("3c transfer marks paid", btPay.data?.booking?.paymentStatus === "paid", btPay.data?.booking?.paymentStatus);
+
+  // cancelled booking rejects new payments
+  await req("PATCH", `${BASE}/bookings/${bt._id}/status`, {
+    cookie: cookies.owner,
+    body: { status: "cancelled" },
+  });
+  const payCancelled = await req("POST", `${BASE}/management/bookings/${bt._id}/payments`, {
+    cookie: cookies.owner,
+    body: { amount: 1 },
+  });
+  check("3c payment on cancelled booking -> 409", payCancelled.status === 409, payCancelled.status);
+
+  const unknownPay = await req("POST", `${BASE}/management/bookings/00000000-0000-4000-8000-000000000000/payments`, {
+    cookie: cookies.owner,
+    body: { amount: 1 },
+  });
+  check("3c payment on unknown booking -> 404", unknownPay.status === 404, unknownPay.status);
 
   await pg.end();
 
