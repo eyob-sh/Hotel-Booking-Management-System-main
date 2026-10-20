@@ -66,6 +66,20 @@ export const paymentProviderKindEnum = pgEnum("payment_provider_kind", [
   "onsite",
 ]);
 
+export const notificationStatusEnum = pgEnum("notification_status", [
+  "pending",
+  "sent",
+  "failed",
+  "cancelled",
+]);
+
+export const notificationChannelEnum = pgEnum("notification_channel", [
+  "email",
+  "sms",
+  "telegram",
+  "log",
+]);
+
 export const paymentRecordStatusEnum = pgEnum("payment_record_status", [
   "pending",
   "succeeded",
@@ -477,6 +491,45 @@ export const settings = pgTable(
     updatedAtIdx: index("settings_updatedAt_idx").on(t.updatedAt),
   })
 );
+
+// ---------------------------------------------------------------------------
+// Notifications outbox (Phase 4) — queued guest/staff messages. Rows are
+// written by booking/payment events and drained by the notification worker
+// (src/services/notifications.ts), which dispatches per `channel`.
+// ---------------------------------------------------------------------------
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    _id: uuid("_id").primaryKey().defaultRandom(),
+    bookingId: uuid("bookingId"),
+    userId: uuid("userId"),
+    channel: notificationChannelEnum("channel").notNull().default("log"),
+    type: varchar("type", { length: 64 }).notNull(),
+    to: varchar("to", { length: 255 }),
+    subject: varchar("subject", { length: 255 }),
+    body: text("body").notNull(),
+    status: notificationStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastAttemptAt: timestamp("lastAttemptAt", { withTimezone: true }),
+    sentAt: timestamp("sentAt", { withTimezone: true }),
+    error: text("error"),
+    meta: jsonb("meta"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    bookingIdx: index("notifications_bookingId_idx").on(t.bookingId),
+    userIdx: index("notifications_userId_idx").on(t.userId),
+    statusIdx: index("notifications_status_idx").on(t.status),
+    channelIdx: index("notifications_channel_idx").on(t.channel),
+    createdIdx: index("notifications_createdAt_idx").on(t.createdAt),
+  })
+);
+
+export type Notification = typeof notifications.$inferSelect;
 
 // Convenience type aliases (rough equivalents of the old Mongoose docs)
 export type User = typeof users.$inferSelect;

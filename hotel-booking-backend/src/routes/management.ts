@@ -6,6 +6,7 @@ import verifyToken from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { getProvider } from "../payments/registry";
 import type { ProviderConfig } from "../payments/types";
+import { enqueueNotification } from "../services/notifications";
 
 // ---------------------------------------------------------------------------
 // Booking management (Phase 3) � what a single-property owner actually needs
@@ -286,6 +287,17 @@ router.post(
         .where(eq(bookings._id, booking._id))
         .returning();
 
+      try {
+        await enqueueNotification({
+          bookingId: booking._id,
+          type: "payment_received",
+          to: booking.email || booking.phone || undefined,
+          subject: `Payment received for booking ${booking.reference ?? ""}`,
+          body: `Payment of ${amount} ${booking.currency} received for ${booking.firstName} ${booking.lastName}.`,
+          channel: "email",
+        });
+      } catch {}
+
       res.status(201).json({ payment, booking: updated ?? booking, remaining: balanceAmount });
     } catch (error) {
       res.status(500).json({ message: "Unable to record payment" });
@@ -417,6 +429,17 @@ router.post(
         })
         .where(eq(bookings._id, booking._id))
         .returning();
+
+      try {
+        await enqueueNotification({
+          bookingId: booking._id,
+          type: "refund_issued",
+          to: booking.email || booking.phone || undefined,
+          subject: `Refund issued for booking ${booking.reference ?? ""}`,
+          body: `Refund of ${amount} ${booking.currency} issued for ${booking.firstName} ${booking.lastName}.`,
+          channel: "email",
+        });
+      } catch {}
 
       res.status(201).json({
         refund,

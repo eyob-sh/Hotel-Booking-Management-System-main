@@ -8,6 +8,7 @@ import {
   releaseRoomTypeNights,
   type AvailabilityResult,
 } from "./availability";
+import { enqueueNotification } from "./notifications";
 
 // ---------------------------------------------------------------------------
 // Booking service — the only code path that writes bookings. Guarantees:
@@ -95,7 +96,7 @@ export async function createBooking(args: CreateBookingArgs): Promise<Booking> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await db.transaction(async (tx) => {
+      const booking = await db.transaction(async (tx) => {
         // Serialize competing bookings for the same hotel + dates. The lock
         // is released automatically at commit/rollback (xact lock).
         await tx.execute(
@@ -230,6 +231,9 @@ export async function createBooking(args: CreateBookingArgs): Promise<Booking> {
 
         return booking;
       });
+
+      await queueBookingNotification(booking, hotel);
+      return booking;
     } catch (error) {
       if (isUniqueViolation(error) && !(error instanceof BookingConflictError) && attempt < 3) {
         lastError = error;
@@ -240,6 +244,35 @@ export async function createBooking(args: CreateBookingArgs): Promise<Booking> {
   }
 
   throw lastError;
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (Phase 4) — queue a guest confirmation whenever a booking is
+// created. Enqueueing never throws (best-effort) so a notification failure
+// can't roll back or fail an otherwise successful booking.
+// ---------------------------------------------------------------------------
+
+async function queueBookingNotification(booking: Booking, hotel: Hotel): Promise<void> {
+  try {
+    const to = booking.email || booking.phone || undefined;
+    await enqueueNotification({
+      bookingId: booking._id,
+      userId: booking.userId ?? undefined,
+      type: "booking_created",
+      to,
+      subject: `Booking ${booking.reference ?? ""} received at ${hotel.name}`,
+      body:
+        `Hi ${booking.firstName}, thanks for booking ${hotel.name}.\n` +
+        `Reference: ${booking.reference ?? booking._id}\n` +
+        `Check-in: ${booking.checkIn}  Check-out: ${booking.checkOut}\n` +
+        `Total: ${booking.totalCost} ${booking.currency}\n` +
+        `Status: ${booking.status}`,
+      channel: "email",
+      meta: { hotelId: hotel._id, status: booking.status },
+    });
+  } catch (error) {
+    console.error("notifications: failed to enqueue booking notification:", error);
+  }
 }
 
 // ---------------------------------------------------------------------------

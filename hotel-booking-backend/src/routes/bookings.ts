@@ -16,6 +16,7 @@ import {
   checkCapacity,
   checkRoomTypeAvailability,
 } from "../services/availability";
+import { enqueueNotification } from "../services/notifications";
 import {
   calendarDateOf,
   diffNights,
@@ -771,6 +772,17 @@ router.post(
       });
 
       res.status(200).json({ booking: toGuestBooking(cancelled) });
+
+      try {
+        await enqueueNotification({
+          bookingId: booking._id,
+          type: "booking_cancelled",
+          to: booking.email || booking.phone || undefined,
+          subject: `Booking ${booking.reference ?? ""} cancelled`,
+          body: `Your booking ${booking.reference ?? booking._id} has been cancelled.`,
+          channel: "email",
+        });
+      } catch {}
     } catch (error) {
       if (error instanceof BookingConflictError) {
         return res.status(409).json({ message: error.message });
@@ -1101,6 +1113,19 @@ router.patch(
       if (!booking) {
         return res.status(404).json({ message: "Booking not found" });
       }
+
+      try {
+        if (status === "confirmed") {
+          await enqueueNotification({
+            bookingId: booking._id,
+            type: "booking_confirmed",
+            to: booking.email || booking.phone || undefined,
+            subject: `Booking ${booking.reference ?? ""} confirmed`,
+            body: `Your booking ${booking.reference ?? booking._id} at the property has been confirmed.`,
+            channel: "email",
+          });
+        }
+      } catch {}
 
       res.status(200).json(booking);
     } catch (error) {

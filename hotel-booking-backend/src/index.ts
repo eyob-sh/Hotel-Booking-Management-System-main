@@ -23,6 +23,7 @@ import adminRoutes from "./routes/admin";
 import adminBookingsRoutes from "./routes/admin-bookings";
 import calendarRoutes from "./routes/calendar";
 import todayRoutes from "./routes/today";
+import { startNotificationWorker } from "./services/notifications";
 import businessInsightsRoutes from "./routes/business-insights";
 import settingsRoutes from "./routes/settings";
 import quotesRoutes from "./routes/quotes";
@@ -267,6 +268,7 @@ const server = app.listen(PORT, () => {
   console.log(`📚 API Docs: http://localhost:${PORT}/api-docs`);
   console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
   console.log("🚀 ============================================");
+  startNotificationWorker();
 });
 
 const gracefulShutdown = (signal: string) => {
@@ -304,4 +306,9 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
   gracefulShutdown("UNHANDLED_REJECTION");
 });import paymentProvidersAdminRoutes from "./routes/payment-providers-admin";
+import notificationsAdminRoutes from "./routes/notifications-admin";
 app.use("/api/admin/payment-providers", paymentProvidersAdminRoutes);
+app.use("/api/admin", notificationsAdminRoutes);
+
+
+
