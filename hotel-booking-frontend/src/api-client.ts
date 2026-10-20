@@ -396,6 +396,17 @@ export const deleteRoomType = async (
   return response.data;
 };
 
+export const fetchCalendar = async (hotelId: string, from?: string, to?: string) => {
+  const q = new URLSearchParams();
+  if (from) q.append("from", from);
+  if (to) q.append("to", to);
+  const qs = q.toString();
+  const response = await axiosInstance.get(
+    `/api/admin/hotels/${hotelId}/calendar${qs ? `?${qs}` : ""}`
+  );
+  return response.data;
+};
+
 // --- PHASE 3d: MANUAL BOOKING (owner/admin) ---
 
 export type ManualBookingPayload = {

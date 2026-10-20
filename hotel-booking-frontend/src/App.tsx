@@ -13,7 +13,7 @@ import { Toaster } from "./components/ui/toaster";
 import Register from "./pages/Register";
 import SignIn from "./pages/SignIn";
 import AddHotel from "./pages/AddHotel";
-import ManageBookings from "./pages/ManageBookings";
+import OccupancyCalendar from "./pages/OccupancyCalendar";
 import EditHotel from "./pages/EditHotel";
 import MyHotels from "./pages/MyHotels";
 import Settings from "./pages/Settings";
@@ -130,6 +130,17 @@ const App = () => {
             <ProtectedRoute roles={["hotel_owner", "admin"]}>
               <Layout>
                 <ManageBookings />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/my-hotels/:hotelId/calendar"
+          element={
+            <ProtectedRoute roles={["hotel_owner", "admin"]}>
+              <Layout>
+                <OccupancyCalendar />
               </Layout>
             </ProtectedRoute>
           }
