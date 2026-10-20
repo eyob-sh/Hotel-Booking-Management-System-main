@@ -396,6 +396,32 @@ export const deleteRoomType = async (
   return response.data;
 };
 
+// --- PHASE 3d: MANUAL BOOKING (owner/admin) ---
+
+export type ManualBookingPayload = {
+  hotelId: string;
+  roomTypeId?: string;
+  checkIn: string;
+  checkOut: string;
+  adultCount: number;
+  childCount: number;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone: string;
+  specialRequests?: string;
+  source?: "web" | "phone" | "walkin" | "telegram";
+  paymentMethod?: string;
+  totalCost?: number;
+};
+
+export const createManualBooking = async (
+  payload: ManualBookingPayload
+): Promise<{ booking: BookingType }> => {
+  const response = await axiosInstance.post("/api/admin/bookings/manual", payload);
+  return response.data;
+};
+
 // --- PHASE 3c: BOOKING MANAGEMENT (owner/admin) ---
 
 export type ManagementPayment = {
