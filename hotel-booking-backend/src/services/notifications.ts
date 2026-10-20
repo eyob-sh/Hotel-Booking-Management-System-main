@@ -1,6 +1,6 @@
-import { db, notifications } from "../db";
-import { desc, eq, inArray } from "drizzle-orm";
-import { getSettings } from "./settings";
+import { db, notifications, bookings, hotels } from "../db";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { getSettings, calendarDateOf, propertyTimeZone } from "./settings";
 
 export type NotificationType =
   | "booking_created"
@@ -99,4 +99,76 @@ export async function processNotifications(limit = 20) {
 export function startNotificationWorker(intervalMs = 30000) {
   processNotifications().catch(() => {});
   setInterval(() => { processNotifications().catch(() => {}); }, intervalMs);
+  // Check-in reminders are date-based, so a slower hourly scan is plenty.
+  queueCheckInReminders().catch(() => {});
+  setInterval(() => { queueCheckInReminders().catch(() => {}); }, 60 * 60 * 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Check-in reminders — queue one notification per confirmed booking whose
+// check-in is tomorrow (property timezone). Idempotent: a booking already
+// having a check_in_reminder notification is skipped, so re-running the scan
+// (restarts, overlapping scans) never double-sends.
+// ---------------------------------------------------------------------------
+
+function addDays(dateOnly: string, days: number): string {
+  const [y, m, d] = dateOnly.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+export async function queueCheckInReminders(): Promise<number> {
+  const settings = await getSettings();
+  const today = calendarDateOf(new Date().toISOString(), propertyTimeZone(settings));
+  const tomorrow = addDays(today, 1);
+
+  const upcoming = await db
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.checkIn, tomorrow), eq(bookings.status, "confirmed")));
+
+  if (upcoming.length === 0) return 0;
+
+  const existing = await db
+    .select({ bookingId: notifications.bookingId })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.type, "check_in_reminder"),
+        inArray(
+          notifications.bookingId,
+          upcoming.map((b) => b._id)
+        )
+      )
+    );
+  const alreadyQueued = new Set(existing.map((r) => r.bookingId));
+
+  let queued = 0;
+  for (const b of upcoming) {
+    if (alreadyQueued.has(b._id)) continue;
+    try {
+      const [hotel] = await db
+        .select({ name: hotels.name })
+        .from(hotels)
+        .where(eq(hotels._id, b.hotelId))
+        .limit(1);
+      await enqueueNotification({
+        bookingId: b._id,
+        userId: b.userId ?? undefined,
+        type: "check_in_reminder",
+        to: b.email || b.phone || undefined,
+        subject: `Reminder: check-in tomorrow at ${hotel?.name ?? "the property"}`,
+        body:
+          `Hi ${b.firstName}, this is a reminder that your check-in is tomorrow ` +
+          `(${b.checkIn}). Reference: ${b.reference ?? b._id}.`,
+        channel: "email",
+        meta: { hotelId: b.hotelId },
+      });
+      queued++;
+    } catch (error) {
+      console.error("notifications: failed to queue check-in reminder:", error);
+    }
+  }
+  return queued;
 }

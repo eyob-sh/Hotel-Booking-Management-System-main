@@ -26,6 +26,7 @@ import {
 } from "recharts";
 
 import { fetchAdminDashboard } from "../api-client";
+import { Link } from "react-router-dom";
 
 type DashboardResponse = {
   kpis: {
@@ -186,16 +187,24 @@ const AdminDashboard = () => {
         <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-semibold text-gray-900">Overview</h2>
-            <button
-              onClick={() => {
-                setRefreshKey((x) => x + 1);
-                refetch();
-              }}
-              className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/admin/notifications"
+                className="border border-blue-600 text-blue-600 px-3 py-2 rounded text-sm hover:bg-blue-50 transition-colors"
+              >
+                Notifications
+              </Link>
+              <button
+                onClick={() => {
+                  setRefreshKey((x) => x + 1);
+                  refetch();
+                }}
+                className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* KPI cards */}

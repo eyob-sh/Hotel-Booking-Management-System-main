@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import * as apiClient from "../api-client";
 import { useQueryWithLoading } from "../hooks/useLoadingHooks";
-import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const addDays = (d: string, days: number) => {
@@ -27,7 +26,6 @@ const OccupancyCalendar = () => {
   const nights: string[] = data?.nights ?? [];
   const roomTypes = data?.roomTypes ?? [];
   const inv: Map<string, number> = data?.inventory ?? new Map();
-  const bookings = data?.bookings ?? [];
 
   const getReserved = (rtId: string, night: string) =>
     inv.get(`${rtId}:${night}`) ?? 0;

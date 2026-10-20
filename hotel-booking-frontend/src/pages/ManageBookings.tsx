@@ -5,7 +5,6 @@ import * as apiClient from "../api-client";
 import { ManagementBooking } from "../api-client";
 import useAppContext from "../hooks/useAppContext";
 import { useQueryWithLoading, useMutationWithLoading } from "../hooks/useLoadingHooks";
-import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
   Dialog,
@@ -16,8 +15,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Separator } from "../components/ui/separator";
-import { Calendar, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 const inputCls = "border rounded-md px-3 py-2 w-full text-sm";
 
@@ -72,6 +70,7 @@ const fmtDate = (d?: string | Date) => {
 };
 
 const _fmtDate = fmtDate;
+void _fmtDate;
 
 const tomorrow = () => {
   const d = new Date();

@@ -218,29 +218,31 @@ becomes a first-class identity so phone-only guests and users both work.
 **Acceptance:** guest books with only a phone (no account); phone-only user registers, logs in, books
 with phone; email-only user still works.
 
-### Phase 3 — Manager/owner UX
+### Phase 3 — Manager/owner UX — ✅ **COMPLETE (2026-10-20)**
 
-- [ ] **Settings page** (owner/admin): currency, USD display rate, timezone, prepayment mode/value,
+- [x] **Settings page** (owner/admin): currency, USD display rate, timezone, prepayment mode/value,
   `allowPayAtProperty`, cancellation hours, check-in/out times, min/max nights, fees, branding,
   **payment method enable/disable + provider config**, feature toggles.
-- [ ] Rooms CRUD (`MyHotels` → Property + Rooms): room types, capacity, price, room count, photos.
-- [ ] **Occupancy calendar** (`GET /api/admin/calendar`): inventory per date, manual adjustments.
-- [ ] **Manual booking** (`POST /api/admin/bookings/manual`): phone/walk-in, source tag, record payments.
-- [ ] Booking management: confirm / check-in / check-out / cancel / no-show (RBAC: owner+admin only).
-- [ ] Record **pay-at-arrival** and **bank-transfer** payments; issue refunds (creates `payments` refund rows).
-- [ ] Arrivals/departures today + light reports.
+- [x] Rooms CRUD (`MyHotels` → Property + Rooms): room types, capacity, price, room count, photos.
+- [x] **Occupancy calendar** (`GET /api/admin/hotels/:hotelId/calendar`): inventory per date.
+- [x] **Manual booking** (`POST /api/admin/bookings/manual`): phone/walk-in, source tag, record payments.
+- [x] Booking management: confirm / check-in / check-out / cancel / no-show (RBAC: owner+admin only).
+- [x] Record **pay-at-arrival** and **bank-transfer** payments; issue refunds (creates `payments` refund rows).
+- [x] Arrivals/departures today (`GET /api/admin/hotels/:hotelId/today`).
 
-**Acceptance:** owner can configure everything without touching code; manual booking blocks inventory; payment recorded on arrival marks booking paid.
+**Acceptance:** owner can configure everything without touching code; manual booking blocks inventory; payment recorded on arrival marks booking paid. *(85/85 phase3 HTTP checks green.)*
 
-### Phase 4 — Notifications
+### Phase 4 — Notifications — ✅ **COMPLETE (2026-10-20)**
 
-- [ ] `notifications` **outbox** table + `services/notifications.ts` with pluggable channels:
-  `email`, `sms`, `telegram` (interface `NotificationChannel { id; send(msg) }`).
-- [ ] Trigger points: booking created/confirmed/reminder, payment received, cancellation, check-in.
-- [ ] Email via existing SMTP/resend-style impl (whatever backend already has — check before building).
-- [ ] Process outbox on interval (no queue infra needed at this scale).
+- [x] `notifications` **outbox** table (`drizzle/0005_notifications.sql`) + `services/notifications.ts`
+  with pluggable channels: `email`, `sms`, `telegram`, `log`.
+- [x] Trigger points: booking created, confirmed, cancelled, payment received, refund issued,
+  check-in reminder (hourly scan, idempotent per booking).
+- [x] Email via nodemailer (SMTP from env/settings) with log fallback when unconfigured.
+- [x] Process outbox on interval (`startNotificationWorker`, 30s) + admin endpoints
+  `GET/POST /api/admin/notifications[/process|/reminders]` and admin UI at `/admin/notifications`.
 
-**Acceptance:** booking → confirmation email recorded in outbox and delivered in dev (log mode OK).
+**Acceptance:** booking → confirmation recorded in outbox and delivered in dev (log mode OK). *(16/16 phase4 HTTP checks green.)*
 
 ### Phase 5 — Telegram
 

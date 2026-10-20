@@ -3,7 +3,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { db, notifications } from "../db";
 import verifyToken from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
-import { processNotifications } from "../services/notifications";
+import { processNotifications, queueCheckInReminders } from "../services/notifications";
 
 const router = express.Router();
 
@@ -36,6 +36,20 @@ router.post(
       res.status(200).json({ ok: true });
     } catch (error) {
       res.status(500).json({ message: "Unable to process notifications" });
+    }
+  }
+);
+
+router.post(
+  "/notifications/reminders",
+  verifyToken,
+  requireRole("admin"),
+  async (_req: Request, res: Response) => {
+    try {
+      const queued = await queueCheckInReminders();
+      res.status(200).json({ ok: true, queued });
+    } catch (error) {
+      res.status(500).json({ message: "Unable to queue reminders" });
     }
   }
 );

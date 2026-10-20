@@ -14,6 +14,8 @@ import Register from "./pages/Register";
 import SignIn from "./pages/SignIn";
 import AddHotel from "./pages/AddHotel";
 import OccupancyCalendar from "./pages/OccupancyCalendar";
+import ManageBookings from "./pages/ManageBookings";
+import Notifications from "./pages/Notifications";
 import EditHotel from "./pages/EditHotel";
 import MyHotels from "./pages/MyHotels";
 import Settings from "./pages/Settings";
@@ -165,6 +167,18 @@ const App = () => {
             <ProtectedRoute roles={["admin"]}>
               <Layout>
                 <AdminDashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* PHASE 4: notifications outbox (admin) */}
+        <Route
+          path="/admin/notifications"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <Layout>
+                <Notifications />
               </Layout>
             </ProtectedRoute>
           }

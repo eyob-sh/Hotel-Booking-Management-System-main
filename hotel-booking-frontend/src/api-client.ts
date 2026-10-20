@@ -558,3 +558,47 @@ export const clearAllStorage = () => {
   localStorage.clear();
   sessionStorage.clear();
 };
+
+// --- PHASE 4: NOTIFICATIONS (admin) ---
+
+export type AdminNotification = {
+  _id: string;
+  bookingId: string | null;
+  userId: string | null;
+  channel: "email" | "sms" | "telegram" | "log";
+  type: string;
+  to: string | null;
+  subject: string | null;
+  body: string;
+  status: "pending" | "sent" | "failed" | "cancelled";
+  attempts: number;
+  sentAt: string | null;
+  error: string | null;
+  createdAt: string | null;
+};
+
+export const fetchAdminNotifications = async (
+  status?: string,
+  limit = 100
+): Promise<{ notifications: AdminNotification[] }> => {
+  const query = new URLSearchParams();
+  if (status) query.append("status", status);
+  query.append("limit", String(limit));
+  const response = await axiosInstance.get(
+    `/api/admin/notifications?${query.toString()}`
+  );
+  return response.data;
+};
+
+export const processAdminNotifications = async (): Promise<{ ok: boolean }> => {
+  const response = await axiosInstance.post("/api/admin/notifications/process");
+  return response.data;
+};
+
+export const queueAdminReminders = async (): Promise<{
+  ok: boolean;
+  queued: number;
+}> => {
+  const response = await axiosInstance.post("/api/admin/notifications/reminders");
+  return response.data;
+};
