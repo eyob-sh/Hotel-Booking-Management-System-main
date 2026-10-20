@@ -49,7 +49,9 @@ export type Settings = {
     telegramEnabled: boolean;
   };
   /** Secrets — never exposed by public endpoints. */
-  telegram: { botToken: string; chatId: string };
+  telegram: { botToken: string; chatId: string; webhookSecret: string };
+  /** Public base URL used to register the Telegram webhook (e.g. https://hotel.example.com). */
+  publicBaseUrl: string;
 };
 
 /** What GET /api/settings/public returns (no secrets). */
@@ -85,7 +87,8 @@ export const defaultSettings: Settings = {
     reviewsEnabled: true,
     telegramEnabled: false,
   },
-  telegram: { botToken: "", chatId: "" },
+  telegram: { botToken: "", chatId: "", webhookSecret: "" },
+  publicBaseUrl: "",
 };
 
 let cache: { value: Settings; at: number } | null = null;
@@ -161,7 +164,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
 
 /** What GET /api/settings returns — Telegram secrets are never echoed back. */
 export type SettingsView = Omit<Settings, "telegram"> & {
-  telegram: { chatId: string; botTokenConfigured: boolean };
+  telegram: { chatId: string; botTokenConfigured: boolean; webhookSecretConfigured: boolean };
 };
 
 export function sanitizeForClient(s: Settings): SettingsView {
@@ -171,6 +174,7 @@ export function sanitizeForClient(s: Settings): SettingsView {
     telegram: {
       chatId: telegram?.chatId ?? "",
       botTokenConfigured: Boolean(telegram?.botToken),
+      webhookSecretConfigured: Boolean(telegram?.webhookSecret),
     },
   };
 }

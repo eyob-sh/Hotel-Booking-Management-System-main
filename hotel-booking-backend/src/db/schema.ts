@@ -200,6 +200,8 @@ export const bookings = pgTable(
     // decides which of email/phone is required per booking source.
     email: varchar("email", { length: 255 }),
     phone: varchar("phone", { length: 50 }),
+    /** Telegram user id when a booking originated from the bot (Phase 5). */
+    telegramId: varchar("telegramId", { length: 32 }),
     adultCount: integer("adultCount").notNull(),
     childCount: integer("childCount").notNull(),
     // Stored as plain calendar dates (YYYY-MM-DD) interpreted in the

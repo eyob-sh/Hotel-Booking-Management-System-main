@@ -244,14 +244,31 @@ with phone; email-only user still works.
 
 **Acceptance:** booking → confirmation recorded in outbox and delivered in dev (log mode OK). *(16/16 phase4 HTTP checks green.)*
 
-### Phase 5 — Telegram
+### Phase 5 — Telegram — ✅ **COMPLETE (2026-10-20)**
 
-- [ ] `POST /api/webhooks/telegram/:secret` endpoint (secret in settings).
-- [ ] Bot commands reuse **services** (availability/booking/payment status) — no logic duplication.
-- [ ] Account linking by phone or `telegramId`.
-- [ ] Enable via `settings.features.telegramEnabled`; `telegram{botToken,chatId}` from settings/env.
+- [x] `POST /api/webhooks/telegram/:secret` (`routes/telegram.ts`) — constant-time secret compare,
+  always-200 fast ack, mounted before the general rate limiter; registered/cleared on boot via
+  `syncWebhook()` using `settings.publicBaseUrl` + `telegram.webhookSecret`.
+- [x] **`services/telegram.ts`** — Bot API client (`sendMessage`, `answerCallbackQuery`, `setWebhook`,
+  `deleteWebhook`, `getMe`), gated by `features.telegramEnabled` + `telegram.botToken`; logs in
+  fallback mode when unconfigured.
+- [x] **`services/telegram-bot.ts`** — shared `processUpdate()` handler. Guest commands `/start /book
+  /rooms /mybooking /cancel /help` (+ owner `/today`). Reuses `checkRoomTypeAvailability()`,
+  `quoteNights()` and `createBooking()` (source `telegram`, captures `telegramId`) — no logic
+  duplication. Inline-keyboard conversation (dates → guests → room → phone).
+- [x] **`services/guest-booking.ts`** — shared reference + phone/email lookup and self-service
+  cancel (same matching rules as the HTTP guest routes).
+- [x] Identity = reference + phone for `/mybooking` and `/cancel`; wrong phone does not cancel.
+- [x] Owner alerts on new/cancelled Telegram bookings; `/today` arrivals/departures for owner chat.
+- [x] `bookings.telegramId` column (`drizzle/0006_telegram.sql`, applied).
+- [x] Settings seam: write-only `telegram.webhookSecret` + `publicBaseUrl` (validated, secrets never
+  echoed — GET reports `*Configured` flags); `POST /api/settings/telegram/test` sends a test message.
+- [x] Frontend: `Settings.tsx` bot token / chat id / webhook secret (write-only) + public base URL +
+  read-only webhook URL + **Send test message**; `api-client.testTelegram()`.
 
 **Acceptance:** message bot → check availability / my booking without touching HTTP route code.
+*(11/11 phase5 HTTP checks green — secret guard, full booking conversation creating a
+`source='telegram'` row, wrong-phone reject, correct-phone cancel, capacity rejection, inert when disabled.)*
 
 ### Phase 6 — Scale-ups (later, as needed)
 

@@ -10,6 +10,7 @@ import {
   sanitizeForClient,
   updateSettings,
 } from "../services/settings";
+import { getMe, sendMessage, syncWebhook } from "../services/telegram";
 
 const router = express.Router();
 
@@ -95,6 +96,8 @@ router.put(
         const telegram: Record<string, string> = {};
         if (typeof src.botToken === "string") telegram.botToken = src.botToken;
         if (typeof src.chatId === "string") telegram.chatId = src.chatId;
+        if (typeof src.webhookSecret === "string")
+          telegram.webhookSecret = src.webhookSecret;
         patch.telegram = telegram as Settings["telegram"];
       }
 
@@ -123,13 +126,84 @@ router.put(
           .status(400)
           .json({ message: "maxNights must be a number" });
       }
+      if (patch.publicBaseUrl !== undefined) {
+        if (typeof patch.publicBaseUrl !== "string") {
+          return res
+            .status(400)
+            .json({ message: "publicBaseUrl must be a string" });
+        }
+        const base = patch.publicBaseUrl.trim();
+        if (base && !/^https?:\/\//i.test(base)) {
+          return res
+            .status(400)
+            .json({ message: "publicBaseUrl must start with http:// or https://" });
+        }
+        patch.publicBaseUrl = base.replace(/\/+$/, "");
+      }
 
       const updated = await updateSettings(patch);
+
+      // Keep the Telegram webhook registration in sync with settings.
+      if (patch.telegram !== undefined || patch.features !== undefined || patch.publicBaseUrl !== undefined) {
+        void syncWebhook();
+      }
+
       res.status(200).json(sanitizeForClient(updated));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to update settings";
       res.status(500).json({ message });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/settings/telegram/test:
+ *   post:
+ *     summary: Send a test message to the configured Telegram owner chat
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/telegram/test",
+  verifyToken,
+  requireRole("admin", "hotel_owner"),
+  async (_req: Request, res: Response) => {
+    try {
+      const current = await getSettings();
+      if (!current.features.telegramEnabled) {
+        return res
+          .status(400)
+          .json({ ok: false, message: "Telegram is not enabled in settings" });
+      }
+      const me = await getMe();
+      if (!me.ok) {
+        return res
+          .status(400)
+          .json({ ok: false, message: me.description || "Bot token is invalid" });
+      }
+      const chatId = current.telegram?.chatId;
+      if (!chatId) {
+        return res
+          .status(400)
+          .json({ ok: false, message: "No owner chat id configured" });
+      }
+      const sent = await sendMessage(
+        chatId,
+        `✅ Test message from your booking bot (${me.username ? `@${me.username}` : "bot"}).`
+      );
+      res.status(sent ? 200 : 502).json({
+        ok: sent,
+        botUsername: me.username,
+        message: sent ? "Test message sent" : "Failed to send test message",
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        message: error instanceof Error ? error.message : "Test failed",
+      });
     }
   }
 );

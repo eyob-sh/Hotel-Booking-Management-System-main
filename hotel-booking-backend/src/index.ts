@@ -24,6 +24,8 @@ import adminBookingsRoutes from "./routes/admin-bookings";
 import calendarRoutes from "./routes/calendar";
 import todayRoutes from "./routes/today";
 import { startNotificationWorker } from "./services/notifications";
+import { syncWebhook } from "./services/telegram";
+import telegramWebhookRoutes from "./routes/telegram";
 import businessInsightsRoutes from "./routes/business-insights";
 import settingsRoutes from "./routes/settings";
 import quotesRoutes from "./routes/quotes";
@@ -167,6 +169,10 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Telegram webhook (Phase 5) — mounted before the general /api limiter so
+// Telegram's bursts are never rate-limited. Secret-guarded in the route.
+app.use("/api/webhooks/telegram", telegramWebhookRoutes);
+
 // Serve locally-uploaded hotel images. Mounted before helmet() so the
 // responses don't receive helmet's same-origin Cross-Origin-Resource-Policy
 // header, which would block cross-origin <img> loads from the frontend.
@@ -269,6 +275,7 @@ const server = app.listen(PORT, () => {
   console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
   console.log("🚀 ============================================");
   startNotificationWorker();
+  syncWebhook();
 });
 
 const gracefulShutdown = (signal: string) => {

@@ -36,6 +36,7 @@ export default function Settings() {
   const [settings, setSettings] = useState<any>(null);
   const [providers, setProviders] = useState<apiClient.AdminPaymentProvider[]>([]);
   const [providerSaving, setProviderSaving] = useState<string | null>(null);
+  const [testingTelegram, setTestingTelegram] = useState(false);
 
   const isManager = user?.role === "admin" || user?.role === "hotel_owner";
 
@@ -143,6 +144,26 @@ export default function Settings() {
       });
     } finally {
       setProviderSaving(null);
+    }
+  };
+
+  const sendTestTelegram = async () => {
+    setTestingTelegram(true);
+    try {
+      const res = await apiClient.testTelegram();
+      showToast({
+        title: res.ok ? "Test message sent" : "Test failed",
+        description: res.botUsername ? `Bot: @${res.botUsername}` : res.message,
+        type: res.ok ? "SUCCESS" : "ERROR",
+      });
+    } catch (e: any) {
+      showToast({
+        title: "Test failed",
+        description: e?.response?.data?.message || e?.message || "Request failed",
+        type: "ERROR",
+      });
+    } finally {
+      setTestingTelegram(false);
     }
   };
 
@@ -347,6 +368,43 @@ export default function Settings() {
           <div>
             <Label>Telegram chat id</Label>
             <Input className={inputCls} value={settings.telegram?.chatId || ""} onChange={(e) => set("telegram", { ...(settings.telegram || {}), chatId: e.target.value })} />
+          </div>
+          <div>
+            <Label>Webhook secret (write-only)</Label>
+            <Input
+              className={inputCls}
+              type="password"
+              placeholder={settings.telegram?.webhookSecretConfigured ? "•••••••• (configured)" : "not configured"}
+              onChange={(e) => set("telegram", { ...(settings.telegram || {}), webhookSecret: e.target.value })}
+            />
+            <p className="text-xs text-gray-500 mt-1">Random string; also part of the webhook URL below. Telegram must reach it.</p>
+          </div>
+          <div>
+            <Label>Public base URL</Label>
+            <Input
+              className={inputCls}
+              value={settings.publicBaseUrl || ""}
+              onChange={(e) => set("publicBaseUrl", e.target.value)}
+              placeholder="https://your-hotel.example.com"
+            />
+            <p className="text-xs text-gray-500 mt-1">Used to register the Telegram webhook (must be HTTPS & publicly reachable).</p>
+          </div>
+          <div className="md:col-span-2">
+            <Label>Webhook URL (register this with Telegram)</Label>
+            <div className="flex gap-2 items-center flex-wrap mt-1">
+              <code className="text-xs bg-gray-100 rounded px-2 py-1 break-all">
+                {(settings.publicBaseUrl || "<public-base-url>").replace(/\/+$/, "")}/api/webhooks/telegram/
+                {settings.telegram?.webhookSecretConfigured ? "{secret}" : "<secret>"}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testingTelegram}
+                onClick={sendTestTelegram}
+              >
+                {testingTelegram ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send test message"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

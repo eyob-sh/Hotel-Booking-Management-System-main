@@ -70,6 +70,8 @@ export type CreateBookingArgs = {
   paymentStatus: Booking["paymentStatus"];
   paymentMethod?: string | null;
   specialRequests?: string | null;
+  /** Telegram user id when the booking originated from the bot (Phase 5). */
+  telegramId?: string | null;
   /** When set, the stay is booked against room-type inventory. */
   roomTypeId?: string | null;
   /** Payment ledger row written in the same transaction. */
@@ -169,6 +171,7 @@ export async function createBooking(args: CreateBookingArgs): Promise<Booking> {
             lastName: guest.lastName,
             email: guest.email,
             phone: guest.phone ?? null,
+            telegramId: args.telegramId ?? null,
             adultCount: args.adultCount,
             childCount: args.childCount,
             checkIn: args.checkIn,

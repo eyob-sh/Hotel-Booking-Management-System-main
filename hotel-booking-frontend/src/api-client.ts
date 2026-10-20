@@ -320,6 +320,17 @@ export const updateSettings = async (patch: any): Promise<any> => {
   return response.data;
 };
 
+export type TelegramTestResult = {
+  ok: boolean;
+  botUsername?: string;
+  message?: string;
+};
+
+export const testTelegram = async (): Promise<TelegramTestResult> => {
+  const response = await axiosInstance.post("/api/settings/telegram/test");
+  return response.data;
+};
+
 // --- PHASE 3: ROOM TYPES (owner/admin) ---
 
 export type RoomTypeAdmin = {
