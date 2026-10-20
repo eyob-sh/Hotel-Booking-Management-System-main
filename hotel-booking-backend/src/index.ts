@@ -21,6 +21,7 @@ import favoriteRoutes from "./routes/favorites";
 import healthRoutes from "./routes/health";
 import adminRoutes from "./routes/admin";
 import adminBookingsRoutes from "./routes/admin-bookings";
+import calendarRoutes from "./routes/calendar";
 import businessInsightsRoutes from "./routes/business-insights";
 import settingsRoutes from "./routes/settings";
 import quotesRoutes from "./routes/quotes";
@@ -201,6 +202,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/bookings", adminBookingsRoutes);
+app.use("/api/admin", calendarRoutes);
 
 // Compression middleware
 app.use(compression());
