@@ -90,7 +90,7 @@ const Home = () => {
                   {roomTypes.map((rt) => (
                     <div
                       key={rt._id}
-                      className="bg-white rounded-xl shadow-soft hover:shadow-medium transition-shadow overflow-hidden flex flex-col"
+                      className="group bg-white rounded-2xl shadow-soft hover:shadow-large transition-all duration-300 overflow-hidden flex flex-col border border-gray-100 hover:-translate-y-1"
                     >
                       <div className="h-48 bg-gray-100 overflow-hidden">
                         {rt.photos?.[0] ? (

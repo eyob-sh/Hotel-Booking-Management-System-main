@@ -127,14 +127,14 @@ const Detail = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div>
         <span className="flex">
           {Array.from({ length: hotel.starRating }).map((_, i) => (
             <AiFillStar key={i} className="fill-yellow-400" />
           ))}
         </span>
-        <h1 className="text-3xl font-bold">{hotel.name}</h1>
+        <h1 className="text-4xl font-bold text-gray-900 tracking-tight mt-2">{hotel.name}</h1>
 
         {/* Location and Contact Info */}
         <div className="flex items-center gap-4 mt-2 text-gray-600">
@@ -206,13 +206,13 @@ const Detail = () => {
         )}
 
         {/* Hotel Images */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
           {hotel.imageUrls.map((image: string, i: number) => (
-            <div key={i} className="h-[300px]">
+            <div key={i} className="h-[320px] rounded-2xl overflow-hidden shadow-medium">
               <img
                 src={image}
                 alt={hotel.name}
-                className="rounded-md w-full h-full object-cover object-center"
+                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
               />
             </div>
           ))}
